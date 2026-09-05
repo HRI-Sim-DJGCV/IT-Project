@@ -7,6 +7,9 @@ import {
   MOCK_WALK_HISTORY,
   buildRouteOptions,
   buildScript,
+  // for admin
+  MOCK_ADMIN_CREDENTIALS,
+  MOCK_CONDITIONS
 } from '../mock/data'
 import type {
   Participant,
@@ -15,6 +18,8 @@ import type {
   ScriptSegment,
   WalkDuration,
   WalkRecord,
+  AdminParticipantItem,
+  ParticipantStatus
 } from '../types'
 
 const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms))
@@ -33,10 +38,21 @@ export async function login(
   password: string,
 ): Promise<LoginResult> {
   await delay()
+
+  // admin login logic
   if (role !== 'participant') {
-    // Admin/researcher views are out of scope for now; accept anything.
+    const adminOk = MOCK_ADMIN_CREDENTIALS.some(
+      (c) => c.role === role && c.userId.toLowerCase() === userId.trim().toLowerCase() && c.password === password
+    )
+    if (!adminOk) throw new Error('Incorrect admin user ID or password.')
     return { role, participant: null }
   }
+  // if (role !== 'participant') {
+  //   // Admin/researcher views are out of scope for now; accept anything.
+  //   return { role, participant: null }
+  // }
+
+  // participant login logic
   const ok = MOCK_CREDENTIALS.some(
     (c) => c.userId.toLowerCase() === userId.trim().toLowerCase() && c.password === password,
   )
@@ -65,4 +81,43 @@ export async function saveWalk(record: WalkRecord): Promise<WalkRecord> {
   await delay()
   walks = [...walks.filter((w) => w.id !== record.id), record]
   return record
+}
+
+// ---------------------------------------------------------------------------
+// Mock admin endpoints
+// ---------------------------------------------------------------------------
+export async function getAdminConditions() {
+  await delay()
+  return [...MOCK_CONDITIONS]
+}
+
+export async function getAdminParticipantsFeed(): Promise<AdminParticipantItem[]> {
+  await delay()
+  
+  const participantWalks = walks.filter(w => w.participantId === MOCK_PARTICIPANT.id)
+  const latestWalk = participantWalks[0]
+
+  const stressText = (score?: number) => {
+    if (!score) return '-'
+    if (score === 1) return 'Not at all'
+    if (score === 2) return 'Somewhat'
+    if (score === 3) return 'Moderate'
+    return 'Very much'
+  }
+
+  // Explicitly tell TypeScript this string is a ParticipantStatus
+  const currentStatus: ParticipantStatus = latestWalk 
+    ? (latestWalk.completed ? 'Completed' : 'In progress') 
+    : 'Not started'
+
+  return [
+    {
+      id: MOCK_PARTICIPANT.id,
+      condition: MOCK_PARTICIPANT.condition,
+      status: currentStatus,
+      setup: participantWalks.length || 1,
+      stressStart: stressText(latestWalk?.preSurvey?.tense), 
+      stressEnd: stressText(latestWalk?.postSurvey?.tense),
+    }
+  ]
 }

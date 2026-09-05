@@ -59,3 +59,27 @@ export interface WalkRecord {
   actualMinutes: number
   completed: boolean
 }
+
+// ---
+// Admin dashboard
+// ---
+
+export type ParticipantStatus = 'Not started' | 'In progress' | 'Completed'
+
+export interface AdminParticipantItem {
+  id: string
+  condition: string
+  status: ParticipantStatus
+  setup: number
+  stressStart?: string
+  stressEnd?: string
+  healthNotes?: string
+  accessCode?: string
+}
+
+export interface ConditionSetting {
+  id: string
+  name: string
+  voice: string
+  age: number
+}
