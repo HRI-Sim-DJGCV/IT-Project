@@ -108,11 +108,13 @@ The mood check-in is a fixed list of statements answered on a 4-point scale. The
 - `SurveyScore` — `1 | 2 | 3 | 4` = *Not at all / Somewhat / Moderately / Very much*.
 - `SurveyResponse` — `Record<itemKey, SurveyScore>`. Stored as a flat map so adding an item doesn't require a schema migration.
 
-The history screen derives a **calm score** (out of 16) by summing positive items and reverse-scoring negative ones (`tense`, `worried`). That calculation lives in the UI for now; the backend may want to own it.
+The history screen shows a **calm score** (out of 16): the sum of positive items plus reverse-scored negative ones (`tense`, `worried`). See [Derived scores](#derived-scores) for where this calculation should live.
 
 ### ScriptSegment
 
 A timed chunk of the meditation script. `atSecond` is the offset from "Begin walk" at which the segment is spoken. Segments are generated from a template whose timings are fractions of the total duration, so the same script stretches over a 15- or 45-minute walk. Not persisted; regenerated per walk.
+
+**The script depends on the participant's condition.** Each experimental arm has its own script, so script retrieval takes the condition as input (see the API contract). The mock currently has a single script; the condition-specific variants are a backend/admin concern. Because a walk's condition is fixed by the participant, `WalkRecord` doesn't need to store the script — but if scripts can be edited over time, store a `scriptVersion` on the record so analysis knows which text was read.
 
 ## Roles
 
@@ -160,7 +162,7 @@ stateDiagram-v2
     Done --> Home : draft cleared
 ```
 
-Leaving the flow before Done (back button, logout) discards the draft; nothing is saved. If abandoned walks should be recorded (`completed = false`, `postSurvey = null`), that is a future change to the Progress screen.
+**Abandoned walks are not saved.** Leaving the flow before Done (back button, logout, closing the tab) discards the draft; nothing reaches the backend. Only walks with both surveys are recorded. Consequently `WalkRecord.completed` is always `true` and `postSurvey` is never `null` in practice; both fields are kept so the backend has room to change this later without a breaking change.
 
 ## API contract (current mock)
 
@@ -171,8 +173,18 @@ All functions in `frontend/src/api/index.ts` are `async` and are the only place 
 | `login(role, userId, password)` → `{ role, participant }` | `POST /auth/login` | Should return a session token in the real implementation |
 | `getWalkHistory(participantId)` → `WalkRecord[]` | `GET /participants/{id}/walks` | Newest first |
 | `generateRoutes(duration)` → `RouteOption[]` | `POST /routes/generate` | Will need the full `WalkPlan` (locations, type) once routing is real |
-| `getScript(durationMinutes)` → `ScriptSegment[]` | `GET /scripts?duration=` | May become condition-dependent (different scripts per arm) |
+| `getScript(durationMinutes)` → `ScriptSegment[]` | `GET /scripts?condition=A&duration=15` | Scripts differ per condition. The backend should resolve the condition from the session rather than trusting a query param, so the frontend can't request the wrong arm's script |
 | `saveWalk(record)` → `WalkRecord` | `POST /walks` | Backend should assign `id` and validate `participantId` against the session |
+
+## Derived scores
+
+The calm score (and any future aggregate) is *derived* from raw survey answers. Best practice for research data:
+
+1. **Store only the raw answers.** `SurveyResponse` is the source of truth. Never store a computed score in the database as if it were an observation — if the scoring rule changes (e.g. a new item is added or an item is re-weighted), stored scores would silently disagree with the raw data.
+2. **Define the scoring rule once, on the backend.** Put the calculation in the Python API and return it alongside the record (e.g. `WalkRecord.scores.calm`). One definition means the participant app, the researcher dashboard, and the CSV export all agree. Version the rule (`scoringVersion: 1`) so old exports can be reproduced.
+3. **The frontend only displays.** The current implementation in [`History.tsx`](../frontend/src/pages/History.tsx) computes the score client-side because there is no backend yet. Treat that as a placeholder: once the API returns scores, delete the client-side calculation rather than keeping two copies.
+
+For the research analysis itself (statistical comparison of conditions), do that offline from the raw export, not in the app — the app's score is for participant feedback, not for the paper.
 
 ## Suggested MongoDB collections
 
@@ -180,12 +192,18 @@ A starting point for the backend, mirroring the entities above:
 
 - `participants` — one document per `Participant`, plus auth fields (password hash, access code).
 - `walks` — one document per `WalkRecord`, with `plan`, `route`, `preSurvey`, `postSurvey` embedded. Index on `participantId` and `date`.
-- `conditions` — admin-defined experimental arms (name, description, script variant). Referenced by `participants.condition`.
+- `conditions` — admin-defined experimental arms (name, description, and the script segments for that arm). Referenced by `participants.condition`.
 - `surveyItems` — optional; only needed if items should be editable by admins rather than fixed in code.
+
+## Decisions
+
+| Question | Decision | Date |
+|---|---|---|
+| Save abandoned walks? | No. Only walks with both surveys are recorded. | 2026-09-05 |
+| What does a condition change? | The meditation script. Survey items are the same for all conditions. | 2026-09-05 |
+| Who owns the calm-score calculation? | Backend defines and returns it; frontend displays only. See [Derived scores](#derived-scores). | 2026-09-05 |
 
 ## Open questions
 
-- Should abandoned walks be saved? (Affects `completed` / `postSurvey: null`.)
-- Will conditions change the script, the survey, or both? Determines whether `getScript` needs the participant's condition.
 - Real route geometry format (GeoJSON vs. provider-specific) — decide when the map provider is chosen.
-- Who owns the calm-score calculation: frontend, backend, or analysis-time only?
+- Should the script text be versioned on each `WalkRecord` (`scriptVersion`) so edits to a condition's script don't muddy earlier data?
