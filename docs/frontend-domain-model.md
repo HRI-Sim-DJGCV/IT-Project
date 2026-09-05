@@ -166,7 +166,7 @@ stateDiagram-v2
 
 ## API contract (current mock)
 
-All functions in `frontend/src/api/index.ts` are `async` and are the only place components fetch data. Each maps naturally to an HTTP endpoint.
+All functions in `frontend/src/api/index.ts` are `async` and are the only place components fetch data. Each maps naturally to an HTTP endpoint; the full request/response contract is in [backend-api-spec.md](backend-api-spec.md).
 
 | Function | Suggested endpoint | Notes |
 |---|---|---|

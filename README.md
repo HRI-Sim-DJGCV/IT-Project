@@ -8,7 +8,7 @@ A guided walking-meditation app for a stress regulation trial. Participants chec
 |---|---|---|
 | `frontend/` | React + TypeScript mobile web app (Vite, Tailwind, React Router) | Participant flow built with mock data |
 | `backend/` | Python API + MongoDB | Not started |
-| `docs/` | Project documentation — start with [frontend-domain-model.md](docs/frontend-domain-model.md) | |
+| `docs/` | Project documentation — [frontend-domain-model.md](docs/frontend-domain-model.md), [backend-api-spec.md](docs/backend-api-spec.md) (draft) | |
 
 ## Running the frontend
 
