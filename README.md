@@ -19,11 +19,16 @@ npm install
 npm run dev
 ```
 
-Then open <http://localhost:5173> — ideally in your browser's mobile device emulation, since the UI is designed for phone screens.
+`npm run dev` only starts the server — it doesn't open a browser. The URL you open decides what you see:
+
+| URL | What you get | Use it for |
+|---|---|---|
+| <http://localhost:5173> | The app on its own, filling the window | What you'd load on a real phone; use Chrome DevTools device emulation (Ctrl+Shift+M → "iPhone 14 Pro") for accurate touch/safe-area behaviour |
+| <http://localhost:5173/phone.html> | The app inside an iPhone-sized frame | Demos and screenshots on a laptop |
+
+Both are fully interactive. The phone frame is a static page (`frontend/public/phone.html`) that loads the app in an iframe, so it also works on any deployment at `/phone.html`.
 
 Demo login: choose **Participant**, user ID `demo`, password `demo`.
-
-**Phone preview:** open <http://localhost:5173/phone.html> to see the app inside an iPhone-sized frame — handy for demos on a laptop. The same page works on any deployment (`/phone.html`).
 
 Other commands (run from `frontend/`):
 
