@@ -23,6 +23,8 @@ Then open <http://localhost:5173> — ideally in your browser's mobile device em
 
 Demo login: choose **Participant**, user ID `demo`, password `demo`.
 
+**Phone preview:** open <http://localhost:5173/phone.html> to see the app inside an iPhone-sized frame — handy for demos on a laptop. The same page works on any deployment (`/phone.html`).
+
 Other commands (run from `frontend/`):
 
 ```bash

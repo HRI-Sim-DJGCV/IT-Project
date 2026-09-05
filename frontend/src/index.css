@@ -18,6 +18,15 @@ body,
   height: 100%;
 }
 
+/*
+ * Top inset used by screen headers. Real phones supply
+ * env(safe-area-inset-top); the phone.html demo frame overrides this
+ * variable so content clears its fake status bar.
+ */
+:root {
+  --safe-top: 12px;
+}
+
 body {
   margin: 0;
   background: var(--color-surface);

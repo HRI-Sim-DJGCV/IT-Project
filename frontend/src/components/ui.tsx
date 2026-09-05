@@ -21,7 +21,7 @@ export function Screen({ title, back, children, footer, right }: ScreenProps) {
       {(title || back || right) && (
         <header
           className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)', paddingBottom: 12 }}
+          style={{ paddingTop: 'max(env(safe-area-inset-top), var(--safe-top, 12px))', paddingBottom: 12 }}
         >
           {back ? (
             <button
