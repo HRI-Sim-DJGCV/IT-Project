@@ -25,9 +25,9 @@ npm run dev
 | URL | What you get | Use it for |
 |---|---|---|
 | <http://localhost:5173> | The app on its own, filling the window | What you'd load on a real phone; use Chrome DevTools device emulation (Ctrl+Shift+M → "iPhone 14 Pro") for accurate touch/safe-area behaviour |
-| <http://localhost:5173/phone.html> | The app inside an iPhone-sized frame | Demos and screenshots on a laptop |
+| <http://localhost:5173/phone.html> | The app inside an iPhone-sized frame, with a toggle to a desktop Chrome-style window | Demos and screenshots on a laptop; the device scales down to fit the window |
 
-Both are fully interactive. The phone frame is a static page (`frontend/public/phone.html`) that loads the app in an iframe, so it also works on any deployment at `/phone.html`.
+Both are fully interactive. The preview is a static page (`frontend/public/phone.html`) that loads the app in an iframe, so it also works on any deployment at `/phone.html`. Switching between Phone and Browser reloads the app at its current route.
 
 Demo logins (mock data, reset on reload):
 
