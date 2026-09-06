@@ -229,6 +229,8 @@ Admin-defined experimental arms. Each holds its own script.
   "_id": "A",
   "name": "Condition A",
   "description": "Breathing-focused script",
+  "voice": "Male",                 // TTS persona that reads the script; edited on the admin Settings screen
+  "age": 30,                       // apparent age of the voice persona
   "scriptVersion": 3,
   "script": [                      // template; atFraction scaled to duration at request time
     { "atFraction": 0.00, "title": "Welcome", "text": "..." },
@@ -272,7 +274,7 @@ Require `role ∈ { medical_professional, researcher }`. Not needed for the firs
 | Method & path | Purpose |
 |---|---|
 | `GET /admin/participants` | List participants with condition, join date, walk count, last walk |
-| `POST /admin/participants` | Create a participant: assigns next `AAA###` id, condition, and generates an access code. Returns the code once |
+| `POST /admin/participants` | Create a participant: body is `{ "condition": "A" }` only. Server assigns the next `AAA###` id and generates the access code. Returns `{ participant, accessCode }`; the code is never returned again |
 | `PATCH /admin/participants/{id}` | Change condition / deactivate |
 | `GET /admin/participants/{id}/walks` | A participant's walks (same shape as `/me/walks`) |
 | `GET /admin/conditions` · `PUT /admin/conditions/{id}` | Read/edit conditions and their scripts (bumps `scriptVersion`) |
@@ -297,3 +299,4 @@ When the backend exists, the frontend change is confined to one file plus token 
 - **Routing provider.** Decide before implementing `/routes/generate` for real. It changes `RouteOption.path`'s format and adds a server-side API key.
 - **Where the calm-score rule is documented for the ethics/research protocol.** `scoring.py` should cite it.
 - **Backups / data retention** for a research dataset — Atlas snapshots are probably sufficient, but confirm with the research lead.
+- **Health notes on participants.** The first admin UI draft (PR #2) had a free-text "clinical notes / contraindications" field per participant. It was removed before merge: participants are anonymised `AAA###` ids and storing clinical notes changes the data-protection and ethics posture of the trial. Do not add such a field to `users` until the research lead confirms it is covered by the protocol, and if it is, specify who can read it (probably `medical_professional` only) and whether it is excluded from exports.

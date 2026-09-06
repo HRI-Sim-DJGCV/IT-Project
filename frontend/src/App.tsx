@@ -13,6 +13,7 @@ import { PreSurvey } from './pages/walk/PreSurvey'
 import { Progress } from './pages/walk/Progress'
 import { SelectRoute } from './pages/walk/SelectRoute'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
+import { AdminParticipants } from './pages/admin/AdminParticipants'
 import { AdminSettings } from './pages/admin/AdminSettings'
 
 function RequireParticipant() {
@@ -59,6 +60,7 @@ export default function App() {
 
           <Route element={<RequireAdmin />}>
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/participants" element={<AdminParticipants />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
           </Route>
 

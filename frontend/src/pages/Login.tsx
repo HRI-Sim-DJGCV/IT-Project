@@ -78,9 +78,13 @@ export function Login() {
             <Button type="submit" disabled={busy}>
               {busy ? 'Logging in…' : 'Log in'}
             </Button>
-            {role === 'participant' ? (
-              <p className="text-center text-xs text-muted">Demo: user ID “demo”, password “demo”</p>
-            ) : null}
+            <p className="text-center text-xs text-muted">
+              {role === 'participant'
+                ? 'Demo: user ID “demo”, password “demo”'
+                : role === 'researcher'
+                  ? 'Demo: user ID “admin”, password “admin”'
+                  : 'Demo: user ID “doctor”, password “doctor”'}
+            </p>
           </>
         ) : null}
       </form>

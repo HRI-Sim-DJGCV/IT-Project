@@ -1,150 +1,90 @@
-import { useState, useEffect } from 'react'
-import { Screen, Button } from '../../components/ui'
-import { useSession } from '../../context/SessionContext'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { AdminParticipantItem, ConditionSetting } from '../../types'
+import { getAdminWalks } from '../../api'
+import { Button, ErrorText } from '../../components/ui'
 import { AdminAddParticipantModal } from './AdminAddParticipantModal'
-import { getAdminConditions, getAdminParticipantsFeed } from '../../api'
+import { AdminLayout } from './AdminLayout'
+import { AdminParticipantList } from './AdminParticipantList'
+import { downloadCsv, walksToCsv } from './exportCsv'
+import { useAdminData } from './useAdminData'
+
+const RECENT_COUNT = 3
 
 export function AdminDashboard() {
   const navigate = useNavigate()
-  const { signOut } = useSession()
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'participants' | 'settings'>('dashboard')
-  
-  const [conditions, setConditions] = useState<ConditionSetting[]>([])
-  const [participants, setParticipants] = useState<AdminParticipantItem[]>([])
+  const { conditions, participants, loading, error, addParticipant } = useAdminData()
   const [showAddModal, setShowAddModal] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function loadData() {
-      const [condData, partData] = await Promise.all([
-        getAdminConditions(),
-        getAdminParticipantsFeed()
-      ])
-      setConditions(condData)
-      setParticipants(partData)
+  async function exportCsv() {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const walks = await getAdminWalks()
+      const stamp = new Date().toISOString().slice(0, 10)
+      downloadCsv(`walking_meditation_walks_${stamp}.csv`, walksToCsv(walks))
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed.')
+    } finally {
+      setExporting(false)
     }
-    loadData()
-  }, [])
-
-  const handleExportCSV = () => {
-    const headers = ['Participant ID', 'Condition', 'Status', 'Setup', 'Stress Start', 'Stress End']
-    const rows = participants.map((p) => [
-      p.id,
-      p.condition,
-      p.status,
-      p.setup,
-      p.stressStart ?? '-',
-      p.stressEnd ?? '-',
-    ])
-    const csvContent =
-      'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', 'walking_meditation_trial_data.csv')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handleParticipantAdded = (newP: AdminParticipantItem) => {
-    setParticipants((prev) => [newP, ...prev])
   }
 
   return (
-    <Screen
-      title="Admin Dashboard"
-      right={
-        <button
-          type="button"
-          onClick={() => {
-            signOut()
-            navigate('/', { replace: true })
-          }}
-          className="text-xs text-muted"
-        >
-          Log out
-        </button>
-      }
-    >
-      <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-primary text-sm font-medium">
-        <button
-          type="button"
-          onClick={() => setActiveTab('dashboard')}
-          className={`py-2 text-center transition ${
-            activeTab === 'dashboard' ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'
-          }`}
-        >
-          Dashboard
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('participants')}
-          className={`border-x border-primary py-2 text-center transition ${
-            activeTab === 'participants' ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'
-          }`}
-        >
-          Participants
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/admin/settings')}
-          className={`py-2 text-center transition ${
-            activeTab === 'settings' ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'
-          }`}
-        >
-          Settings
-        </button>
-      </div>
-
+    <AdminLayout title="Admin Dashboard">
       <section className="flex flex-col gap-2">
         <h2 className="text-base font-bold text-ink">Stress regulation trial</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {conditions.map((c) => (
-            <div key={c.id} className="rounded-xl border border-line bg-card p-3 shadow-xs">
-              <p className="font-bold text-ink">{c.name}</p>
-              <p className="text-xs text-muted mt-1">Voice: {c.voice.replace(' Voice', '')}</p>
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {conditions.map((c) => (
+              <div key={c.id} className="rounded-xl border border-line bg-card p-3">
+                <p className="font-bold text-ink">{c.name}</p>
+                <p className="mt-1 text-xs text-muted">Voice: {c.voice}</p>
+                <p className="text-xs text-muted">
+                  Participants: {participants.filter((p) => p.condition === c.id).length}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-base font-bold text-ink">Recent Participants</h2>
-        <div className="flex flex-col divide-y divide-line overflow-hidden rounded-xl border border-line bg-card">
-          {participants.length === 0 ? (
-             <div className="p-3.5 text-sm text-muted">Loading...</div>
-          ) : (
-            participants.map((p) => (
-              <div key={p.id} className="p-3.5">
-                <p className="font-bold text-ink text-sm">ID: {p.id}</p>
-                <p className="text-xs text-muted mt-0.5">
-                  Status: <span className="font-medium text-ink">{p.status}</span> | Setup: {p.setup}
-                </p>
-                <p className="text-xs text-muted mt-0.5">
-                  Stress Start: {p.stressStart} | End: {p.stressEnd}
-                </p>
-              </div>
-            ))
-          )}
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-base font-bold text-ink">Recent participants</h2>
+          {participants.length > RECENT_COUNT ? (
+            <button type="button" onClick={() => navigate('/admin/participants')} className="text-xs text-primary">
+              View all ({participants.length})
+            </button>
+          ) : null}
         </div>
+        <AdminParticipantList
+          participants={participants.slice(0, RECENT_COUNT)}
+          loading={loading}
+          error={error}
+        />
       </section>
 
       <div className="mt-auto flex flex-col gap-2.5 pt-4">
-        <Button variant="secondary" onClick={handleExportCSV}>
-          Export CSV
+        <ErrorText>{exportError}</ErrorText>
+        <Button variant="secondary" onClick={exportCsv} disabled={exporting}>
+          {exporting ? 'Preparing…' : 'Export CSV (one row per walk)'}
         </Button>
-        <Button onClick={() => setShowAddModal(true)}>Add participant</Button>
+        <Button onClick={() => setShowAddModal(true)} disabled={loading || !!error}>
+          Add participant
+        </Button>
       </div>
 
-      {showAddModal && (
+      {showAddModal ? (
         <AdminAddParticipantModal
           conditions={conditions}
           onClose={() => setShowAddModal(false)}
-          onAdd={handleParticipantAdded}
+          onAdded={addParticipant}
         />
-      )}
-    </Screen>
+      ) : null}
+    </AdminLayout>
   )
 }

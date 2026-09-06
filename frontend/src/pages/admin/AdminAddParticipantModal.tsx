@@ -1,107 +1,118 @@
-import { useState } from 'react'
-import { Button, TextInput } from '../../components/ui'
-import type { AdminParticipantItem, ConditionSetting } from '../../types'
+import { useEffect, useId, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
+import { createAdminParticipant } from '../../api'
+import { Button, Chips, ErrorText } from '../../components/ui'
+import type { AdminParticipantItem, ConditionSetting, CreateParticipantResult } from '../../types'
 
 interface Props {
   conditions: ConditionSetting[]
   onClose: () => void
-  onAdd: (participant: AdminParticipantItem) => void
+  /** Called once the participant exists on the server (mock), before the code is shown. */
+  onAdded: (participant: AdminParticipantItem) => void
 }
 
-export function AdminAddParticipantModal({ conditions, onClose, onAdd }: Props) {
-  const [participantId, setParticipantId] = useState('')
-  const [selectedCondition, setSelectedCondition] = useState<string>(conditions[0]?.id ?? 'A')
-  const [healthNotes, setHealthNotes] = useState('')
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null)
+/**
+ * Creates a participant. The server assigns the AAA### id and returns the
+ * single-use access code once, so the admin only chooses the condition.
+ */
+export function AdminAddParticipantModal({ conditions, onClose, onAdded }: Props) {
+  const titleId = useId()
+  const conditionLabelId = useId()
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [condition, setCondition] = useState<string | null>(conditions[0]?.id ?? null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<CreateParticipantResult | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!participantId.trim()) return
-
-    const code = `${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
-
-    const newParticipant: AdminParticipantItem = {
-      id: participantId.trim(),
-      condition: selectedCondition,
-      status: 'Not started',
-      setup: 1,
-      stressStart: '-',
-      stressEnd: '-',
-      healthNotes,
-      accessCode: code,
+  useEffect(() => {
+    panelRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
     }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
-    onAdd(newParticipant)
-    setGeneratedCode(code)
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!condition) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await createAdminParticipant(condition)
+      onAdded(res.participant)
+      setResult(res)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create participant.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-xl">
-        {!generatedCode ? (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <h2 className="text-xl font-bold text-ink">Add participant</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-xl outline-none"
+      >
+        {!result ? (
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <h2 id={titleId} className="text-xl font-bold text-ink">
+              Add participant
+            </h2>
+            <p className="text-sm text-muted">
+              A participant ID will be assigned automatically and a single-use access code generated.
+            </p>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-ink">Participant ID</label>
-              <TextInput
-                placeholder="e.g. AAA004"
-                value={participantId}
-                onChange={(e) => setParticipantId(e.target.value)}
-                required
-              />
+            <div className="flex flex-col gap-1.5" role="group" aria-labelledby={conditionLabelId}>
+              <span id={conditionLabelId} className="text-sm font-medium">
+                Assign condition
+              </span>
+              {conditions.length === 0 ? (
+                <p className="text-sm text-muted">Add a condition in Settings first.</p>
+              ) : (
+                <Chips
+                  options={conditions.map((c) => ({ value: c.id, label: c.name }))}
+                  value={condition}
+                  onChange={setCondition}
+                  columns={conditions.length >= 3 ? 3 : 2}
+                />
+              )}
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-ink">Assign condition</label>
-              <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-line">
-                {['A', 'B', 'C'].map((cond, idx) => (
-                  <button
-                    key={cond}
-                    type="button"
-                    onClick={() => setSelectedCondition(cond)}
-                    className={`py-2 text-sm font-semibold transition ${
-                      selectedCondition === cond
-                        ? 'bg-accent/70 text-primary'
-                        : 'bg-surface text-muted hover:bg-line'
-                    } ${idx !== 0 ? 'border-l border-line' : ''}`}
-                  >
-                    {cond}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-ink">Health notes</label>
-              <textarea
-                rows={4}
-                className="w-full rounded-xl border border-line bg-card p-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-accent"
-                value={healthNotes}
-                onChange={(e) => setHealthNotes(e.target.value)}
-                placeholder="Enter clinical notes or study contraindications..."
-              />
-            </div>
+            <ErrorText>{error}</ErrorText>
 
             <div className="flex flex-col gap-2 pt-2">
-              <Button variant="secondary" onClick={onClose}>
+              <Button variant="secondary" onClick={onClose} disabled={busy}>
                 Cancel
               </Button>
-              <Button type="submit">Add & generate access code</Button>
+              <Button type="submit" disabled={busy || !condition}>
+                {busy ? 'Creating…' : 'Add & generate access code'}
+              </Button>
             </div>
           </form>
         ) : (
-          <div className="flex flex-col items-center gap-3 text-center py-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-700 text-xl font-bold">
+          <div className="flex flex-col items-center gap-3 py-2 text-center">
+            <div
+              aria-hidden="true"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-xl font-bold text-green-700"
+            >
               ✓
             </div>
-            <h3 className="text-lg font-bold text-ink">Participant Created</h3>
-            <p className="text-xs text-muted">
-              Share this single-use code with participant <b>{participantId}</b>:
+            <h2 id={titleId} className="text-lg font-bold text-ink">
+              Participant created
+            </h2>
+            <p className="text-sm text-muted">
+              Share this single-use code with participant <b>{result.participant.id}</b>. It will not be shown again.
             </p>
-            <div className="w-full rounded-xl bg-surface py-3 text-center text-lg font-mono font-bold tracking-widest text-primary border border-line">
-              {generatedCode}
-            </div>
+            <p className="w-full rounded-xl border border-line bg-surface py-3 text-center font-mono text-lg font-bold tracking-widest text-primary">
+              {result.accessCode}
+            </p>
             <Button onClick={onClose} className="mt-2">
               Done
             </Button>

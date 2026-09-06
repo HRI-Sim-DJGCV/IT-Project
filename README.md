@@ -6,7 +6,7 @@ A guided walking-meditation app for a stress regulation trial. Participants chec
 
 | Folder | What | Status |
 |---|---|---|
-| `frontend/` | React + TypeScript mobile web app (Vite, Tailwind, React Router) | Participant flow built with mock data |
+| `frontend/` | React + TypeScript mobile web app (Vite, Tailwind, React Router) | Participant flow and admin dashboard built with mock data |
 | `backend/` | Python API + MongoDB | Not started |
 | `docs/` | Project documentation — [frontend-domain-model.md](docs/frontend-domain-model.md), [backend-api-spec.md](docs/backend-api-spec.md) (draft) | |
 
@@ -29,7 +29,15 @@ npm run dev
 
 Both are fully interactive. The phone frame is a static page (`frontend/public/phone.html`) that loads the app in an iframe, so it also works on any deployment at `/phone.html`.
 
-Demo login: choose **Participant**, user ID `demo`, password `demo`.
+Demo logins (mock data, reset on reload):
+
+| Role | User ID | Password | Lands on |
+|---|---|---|---|
+| Participant | `demo` | `demo` | Home → walk flow |
+| Research admin | `admin` | `admin` | Admin dashboard (`/admin`) |
+| Medical professional | `doctor` | `doctor` | Admin dashboard (`/admin`) |
+
+The admin dashboard lists participants, adds a participant (the mock assigns the next `AAA###` id and shows a single-use access code once), edits conditions, and exports one CSV row per walk.
 
 Other commands (run from `frontend/`):
 
