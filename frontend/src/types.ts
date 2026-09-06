@@ -6,7 +6,8 @@ export type Role = 'participant' | 'medical_professional' | 'researcher'
 export interface Participant {
   id: string // e.g. "AAA001"
   displayName: string
-  condition: 'A' | 'B'
+  /** Id of the admin-defined experimental arm (see `ConditionSetting`), e.g. "A" */
+  condition: string
   joinedAt: string // ISO date
 }
 
@@ -58,4 +59,48 @@ export interface WalkRecord {
   postSurvey: SurveyResponse | null
   actualMinutes: number
   completed: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Admin / researcher dashboard
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a participant is in the trial. Abandoned walks are never saved, so a
+ * participant is either yet to walk or has completed at least one walk;
+ * 'In progress' is kept so the backend can report it later without a
+ * breaking change.
+ */
+export type ParticipantStatus = 'Not started' | 'In progress' | 'Completed'
+
+/** One row of `GET /admin/participants`. */
+export interface AdminParticipantItem {
+  id: string
+  condition: string
+  status: ParticipantStatus
+  walkCount: number
+  /** ISO date of the most recent walk, or null if none */
+  lastWalkAt: string | null
+  /**
+   * Placeholder labels derived client-side from the "tense" survey item of
+   * the latest walk. The backend (`GET /admin/stats`) owns the real scoring
+   * rule; delete this derivation when that exists.
+   */
+  stressStart: string
+  stressEnd: string
+}
+
+/** Result of `POST /admin/participants`. The access code is returned once. */
+export interface CreateParticipantResult {
+  participant: AdminParticipantItem
+  accessCode: string
+}
+
+/** An experimental arm as edited on the admin Settings screen. */
+export interface ConditionSetting {
+  id: string
+  name: string
+  /** Text-to-speech persona used to read this arm's script */
+  voice: string
+  age: number
 }

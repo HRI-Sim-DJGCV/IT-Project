@@ -5,13 +5,16 @@ import { History } from './pages/History'
 import { Home } from './pages/Home'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
-import { AccessCodeStub, AdminStub, RequestAccessStub } from './pages/Stubs'
+import { AccessCodeStub, RequestAccessStub } from './pages/Stubs'
 import { Done } from './pages/walk/Done'
 import { Plan } from './pages/walk/Plan'
 import { PostSurvey } from './pages/walk/PostSurvey'
 import { PreSurvey } from './pages/walk/PreSurvey'
 import { Progress } from './pages/walk/Progress'
 import { SelectRoute } from './pages/walk/SelectRoute'
+import { AdminDashboard } from './pages/admin/AdminDashboard'
+import { AdminParticipants } from './pages/admin/AdminParticipants'
+import { AdminSettings } from './pages/admin/AdminSettings'
 
 function RequireParticipant() {
   const { role, participant } = useSession()
@@ -56,7 +59,9 @@ export default function App() {
           </Route>
 
           <Route element={<RequireAdmin />}>
-            <Route path="/admin" element={<AdminStub />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/participants" element={<AdminParticipants />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

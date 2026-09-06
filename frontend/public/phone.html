@@ -3,42 +3,90 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Walking Meditation — phone preview</title>
+    <title>Walking Meditation — device preview</title>
     <style>
-      /* Dev-only page: renders the app inside a phone bezel for demos on a laptop. */
+      /*
+       * Dev-only page: renders the app inside a phone bezel or a Chrome-style
+       * browser window for demos on a laptop. The device is scaled down to fit
+       * the viewport, so nothing is ever clipped.
+       */
       :root {
         --screen-w: 390px;
         --screen-h: 844px;
         --bezel: 14px;
+        --browser-w: 1180px;
+        --browser-h: 760px;
+        --toolbar-h: 56px;
       }
-      html { height: 100%; }
+      html, body { height: 100%; }
       body {
-        min-height: 100%;
         margin: 0;
-        padding: 24px 16px;
-        box-sizing: border-box;
         display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 40px;
+        flex-direction: column;
+        overflow: hidden;
         background: radial-gradient(circle at 30% 20%, #2a3550, #0f1320 70%);
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
         color: #c9d1e3;
       }
+
+      /* ---- top toolbar ---- */
+      .toolbar {
+        height: var(--toolbar-h);
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 0 16px;
+      }
+      .toolbar h1 { font-size: 15px; font-weight: 600; color: #fff; margin: 0; }
+      .seg {
+        display: inline-flex;
+        border: 1px solid #3a4258;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #14171e;
+      }
+      .seg button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: #c9d1e3;
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+      .seg button + button { border-left: 1px solid #3a4258; }
+      .seg button[aria-pressed="true"] { background: #cfe0f5; color: #1e2a44; font-weight: 600; }
+      .hint { font-size: 12px; color: #8b95ad; }
+      @media (max-width: 640px) { .hint { display: none; } }
+
+      /* ---- stage: centres the scaled device ---- */
+      .stage {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 16px 24px;
+        min-height: 0;
+      }
+      .fit { position: relative; flex: none; } /* sized by JS to the scaled device */
+      .device { position: absolute; top: 0; left: 0; transform-origin: top left; }
+
+      /* ---- phone ---- */
       .phone {
-        position: relative;
         width: calc(var(--screen-w) + var(--bezel) * 2);
         height: calc(var(--screen-h) + var(--bezel) * 2);
         padding: var(--bezel);
+        box-sizing: border-box;
         border-radius: 58px;
         background: #0b0d12;
         box-shadow:
           0 0 0 2px #2b2f3a,
           0 0 0 6px #14171e,
           0 30px 80px rgba(0, 0, 0, 0.6);
-        flex: none;
       }
-      /* side buttons */
       .phone::before, .phone::after {
         content: "";
         position: absolute;
@@ -53,91 +101,234 @@
         height: var(--screen-h);
         border-radius: 46px;
         overflow: hidden;
-        background: #f5f5f7;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
       }
+      /* system status bar (Chrome paints it white to match its toolbar) */
+      .statusbar { position: relative; height: 54px; flex: none; background: #fff; }
       .island {
-        position: absolute;
-        top: 11px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 120px;
-        height: 34px;
-        border-radius: 20px;
-        background: #0b0d12;
-        z-index: 2;
+        position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+        width: 120px; height: 34px; border-radius: 20px; background: #0b0d12;
       }
-      .clock {
-        position: absolute;
-        top: 18px;
-        left: 34px;
-        font-size: 15px;
-        font-weight: 600;
-        color: #16181d;
-        z-index: 2;
+      .clock { position: absolute; top: 18px; left: 34px; font-size: 15px; font-weight: 600; color: #16181d; }
+      .status { position: absolute; top: 18px; right: 30px; font-size: 13px; color: #16181d; }
+      /* mobile Chrome toolbar: omnibox, tab switcher, menu */
+      .mtoolbar {
+        height: 56px; flex: none; display: flex; align-items: center; gap: 10px;
+        padding: 0 8px 0 12px; background: #fff; border-bottom: 1px solid #e3e3e3;
       }
-      .status {
-        position: absolute;
-        top: 18px;
-        right: 30px;
-        font-size: 13px;
-        color: #16181d;
-        z-index: 2;
+      .mtoolbar .url { height: 40px; border-radius: 20px; background: #f1f3f4; font-size: 15px; }
+      .mtoolbar .url .lock { font-size: 13px; }
+      .mtoolbar .url span:not(.lock) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tabs-btn {
+        width: 24px; height: 24px; flex: none; border: 2px solid #5f6368; border-radius: 5px;
+        display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #5f6368;
       }
-      iframe {
-        border: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
+      .mtoolbar .menu { width: 32px; height: 32px; font-size: 20px; }
+      /* Android gesture nav area below the page */
+      .navbar { position: relative; height: 24px; flex: none; background: #fff; }
       .home-bar {
-        position: absolute;
-        bottom: 8px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 134px;
-        height: 5px;
-        border-radius: 3px;
-        background: #16181d;
-        opacity: 0.85;
-        z-index: 2;
+        position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+        width: 134px; height: 5px; border-radius: 3px; background: #16181d; opacity: 0.85;
       }
-      aside { max-width: 260px; font-size: 14px; line-height: 1.5; }
-      aside h1 { font-size: 18px; margin: 0 0 8px; color: #fff; }
-      aside code { background: #1c2029; padding: 1px 5px; border-radius: 4px; }
-      @media (max-width: 760px) { aside { display: none; } body { gap: 0; } .phone { transform: scale(0.9); } }
+
+      /* ---- Chrome-style browser window ---- */
+      .browser {
+        width: var(--browser-w);
+        height: var(--browser-h);
+        display: flex;
+        flex-direction: column;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 0 0 1px #2b2f3a, 0 30px 80px rgba(0, 0, 0, 0.6);
+      }
+      .tabstrip {
+        height: 40px; flex: none; display: flex; align-items: flex-end;
+        padding: 6px 8px 0; background: #dee1e6; gap: 6px;
+      }
+      .tab {
+        display: flex; align-items: center; gap: 8px;
+        height: 34px; padding: 0 12px; min-width: 200px; max-width: 240px;
+        background: #fff; border-radius: 8px 8px 0 0; font-size: 12px; color: #202124;
+      }
+      .tab img { width: 16px; height: 16px; }
+      .tab span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tab .x { color: #5f6368; font-size: 14px; }
+      .newtab { width: 28px; height: 28px; margin-bottom: 3px; display: grid; place-items: center; color: #5f6368; font-size: 18px; }
+      .win { margin-left: auto; margin-bottom: 8px; display: flex; gap: 18px; color: #5f6368; font-size: 13px; padding-right: 8px; }
+      .omnibar {
+        height: 40px; flex: none; display: flex; align-items: center; gap: 10px;
+        padding: 0 10px; background: #fff; border-bottom: 1px solid #dadce0;
+      }
+      .nav { display: flex; gap: 6px; }
+      .nav button, .menu {
+        appearance: none; border: 0; background: transparent; width: 28px; height: 28px;
+        border-radius: 50%; color: #5f6368; font-size: 15px; cursor: pointer; display: grid; place-items: center;
+      }
+      .nav button:hover, .menu:hover { background: #f1f3f4; }
+      .nav button:disabled { color: #babcbe; cursor: default; background: transparent; }
+      .url {
+        flex: 1; height: 28px; display: flex; align-items: center; gap: 8px;
+        padding: 0 12px; border-radius: 14px; background: #f1f3f4; font-size: 13px; color: #202124;
+      }
+      .url .lock { color: #5f6368; font-size: 12px; }
+      .url .url-host { color: #202124; }
+      .url .url-path { color: #5f6368; }
+      .viewport { flex: 1; min-height: 0; background: #f5f5f7; }
+
+      iframe { border: 0; width: 100%; height: 100%; display: block; }
+
+      /* mode switching */
+      body.mode-phone .browser, body.mode-browser .phone { display: none; }
     </style>
   </head>
-  <body>
-    <div class="phone">
-      <div class="screen">
-        <div class="island"></div>
-        <div class="clock" id="clock">9:41</div>
-        <div class="status">●●● ▲ ▮</div>
-        <iframe id="app" src="/" title="Walking Meditation app"></iframe>
-        <div class="home-bar"></div>
+  <body class="mode-phone">
+    <header class="toolbar">
+      <h1>Walking Meditation preview</h1>
+      <div class="seg" role="group" aria-label="Preview device">
+        <button type="button" id="btn-phone" aria-pressed="true">Phone</button>
+        <button type="button" id="btn-browser" aria-pressed="false">Browser</button>
       </div>
-    </div>
-    <aside>
-      <h1>Phone preview</h1>
-      <p>The app running inside a 390×844 frame (iPhone 14/15 size). Interact with it normally.</p>
-      <p>This page is for demos only; it isn't linked from the app. Open <code>/phone.html</code> on any deployment to use it.</p>
-    </aside>
+      <span class="hint" id="hint">390×844 phone running Chrome. Scaled to fit; interact normally.</span>
+    </header>
+
+    <main class="stage">
+      <div class="fit" id="fit">
+        <!-- Phone running mobile Chrome -->
+        <div class="device phone" id="phone">
+          <div class="screen">
+            <div class="statusbar">
+              <div class="island"></div>
+              <div class="clock" id="clock">9:41</div>
+              <div class="status">●●● ▲ ▮</div>
+            </div>
+            <div class="mtoolbar">
+              <div class="url">
+                <span class="lock">🔒</span>
+                <span><span class="url-host"></span><span class="url-path">/</span></span>
+              </div>
+              <div class="tabs-btn" title="Tabs">1</div>
+              <button type="button" class="menu" title="Menu">⋮</button>
+            </div>
+            <div class="viewport" id="phone-viewport"></div>
+            <div class="navbar"><div class="home-bar"></div></div>
+          </div>
+        </div>
+
+        <!-- Chrome-style window -->
+        <div class="device browser" id="browser">
+          <div class="tabstrip">
+            <div class="tab">
+              <img src="/favicon.svg" alt="" />
+              <span id="tab-title">Walking Meditation</span>
+              <span class="x">✕</span>
+            </div>
+            <div class="newtab">+</div>
+            <div class="win"><span>—</span><span>☐</span><span>✕</span></div>
+          </div>
+          <div class="omnibar">
+            <div class="nav">
+              <button type="button" id="nav-back" title="Back">←</button>
+              <button type="button" id="nav-fwd" title="Forward">→</button>
+              <button type="button" id="nav-reload" title="Reload">⟳</button>
+            </div>
+            <div class="url">
+              <span class="lock">🔒</span>
+              <span class="url-host"></span><span class="url-path">/</span>
+            </div>
+            <button type="button" class="menu" title="Menu">⋮</button>
+          </div>
+          <div class="viewport" id="browser-viewport"></div>
+        </div>
+
+        <!-- Single app instance, moved between the two viewports. -->
+        <iframe id="app" src="/" title="Walking Meditation app"></iframe>
+      </div>
+    </main>
+
     <script>
+      const body = document.body;
+      const fit = document.getElementById('fit');
+      const frame = document.getElementById('app');
+      const phone = document.getElementById('phone');
+      const browser = document.getElementById('browser');
+      const hint = document.getElementById('hint');
+      const HINTS = {
+        phone: '390×844 phone running Chrome. Scaled to fit; interact normally.',
+        browser: '1180×760 desktop Chrome. The app is mobile-first, so it centres at phone width.',
+      };
+
+      // ---- fake clock in the phone status bar ----
       function tick() {
         const d = new Date();
         document.getElementById('clock').textContent =
           (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0');
       }
-      // Simple clock; keep the classic 9:41 if you prefer by removing this.
       setInterval(tick, 30000); tick();
 
-      // Tell the app (same origin) to leave room for the fake status bar.
-      const frame = document.getElementById('app');
-      frame.addEventListener('load', () => {
+      // ---- mode switching ----
+      // Re-parenting an iframe reloads it, so a mode switch restarts the app
+      // at its current route (session state survives in sessionStorage).
+      function setMode(mode) {
+        const current = body.classList.contains('mode-phone') ? 'phone' : 'browser';
+        if (mode === current && frame.parentElement !== fit) return;
+        let path = '/';
+        try { path = frame.contentWindow.location.pathname + frame.contentWindow.location.search; } catch (e) {}
+        body.className = 'mode-' + mode;
+        document.getElementById('btn-phone').setAttribute('aria-pressed', String(mode === 'phone'));
+        document.getElementById('btn-browser').setAttribute('aria-pressed', String(mode === 'browser'));
+        hint.textContent = HINTS[mode];
+        const target = document.getElementById(mode + '-viewport');
+        if (frame.parentElement !== target) {
+          frame.src = path;
+          target.appendChild(frame);
+        }
+        try { localStorage.setItem('preview.mode', mode); } catch (e) {}
+        layout();
+      }
+      document.getElementById('btn-phone').addEventListener('click', () => setMode('phone'));
+      document.getElementById('btn-browser').addEventListener('click', () => setMode('browser'));
+
+      // ---- scale the active device to fit the viewport ----
+      function layout() {
+        const device = body.classList.contains('mode-phone') ? phone : browser;
+        const w = device.offsetWidth;
+        const h = device.offsetHeight;
+        const availW = window.innerWidth - 32;
+        const availH = window.innerHeight - 56 - 32;
+        const s = Math.min(1, availW / w, availH / h);
+        device.style.transform = 'scale(' + s + ')';
+        fit.style.width = w * s + 'px';
+        fit.style.height = h * s + 'px';
+      }
+      window.addEventListener('resize', layout);
+
+      // ---- iframe integration (same origin) ----
+      // In both modes the page sits below Chrome's own toolbar, so it gets no
+      // top safe-area inset; the app's default header padding is correct.
+      frame.addEventListener('load', updateUrl);
+
+      function updateUrl() {
         try {
-          frame.contentDocument.documentElement.style.setProperty('--safe-top', '54px');
-        } catch (e) { /* cross-origin: ignore */ }
-      });
+          const loc = frame.contentWindow.location;
+          document.querySelectorAll('.url-host').forEach((el) => { el.textContent = loc.host; });
+          document.querySelectorAll('.url-path').forEach((el) => { el.textContent = loc.pathname + loc.search; });
+          const t = frame.contentDocument && frame.contentDocument.title;
+          if (t) document.getElementById('tab-title').textContent = t;
+        } catch (e) {}
+      }
+      setInterval(updateUrl, 500); // SPA route changes don't fire load
+
+      document.getElementById('nav-back').addEventListener('click', () => { try { frame.contentWindow.history.back(); } catch (e) {} });
+      document.getElementById('nav-fwd').addEventListener('click', () => { try { frame.contentWindow.history.forward(); } catch (e) {} });
+      document.getElementById('nav-reload').addEventListener('click', () => { try { frame.contentWindow.location.reload(); } catch (e) {} });
+
+      // ---- start ----
+      let initial = 'phone';
+      try { initial = localStorage.getItem('preview.mode') === 'browser' ? 'browser' : 'phone'; } catch (e) {}
+      setMode(initial);
     </script>
   </body>
 </html>

@@ -20,7 +20,7 @@ erDiagram
     Participant {
         string id PK "e.g. AAA001"
         string displayName
-        string condition "A | B"
+        string condition "FK to ConditionSetting.id"
         string joinedAt "ISO date"
     }
     WalkRecord {
@@ -60,13 +60,15 @@ erDiagram
 
 ### Participant
 
-A trial participant. Identified by an anonymous ID (`AAA001` style) rather than a name; `displayName` is derived from it. `condition` is the experimental arm the participant was assigned to by an administrator (`A` or `B`); the frontend displays it but does not yet act on it.
+A trial participant. Identified by an anonymous ID (`AAA001` style) rather than a name; `displayName` is derived from it. `condition` is the id of the experimental arm (a `ConditionSetting`, see [Admin entities](#admin-entities)) the participant was assigned to when an administrator created them; the participant app displays it but does not yet act on it.
+
+Participants hold **no personal or clinical data**. A free-text "health notes" field was proposed and withdrawn pending sign-off from the research lead (see the API spec's open points).
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | `string` | Primary key, also the login user ID |
+| `id` | `string` | Primary key, also the login user ID. Assigned by the backend (mock: next free `AAA###`) |
 | `displayName` | `string` | Shown on the home screen |
-| `condition` | `'A' \| 'B'` | Set by admin; may become an open-ended string once conditions are admin-defined |
+| `condition` | `string` | `ConditionSetting.id`, set by admin at creation |
 | `joinedAt` | ISO date string | |
 
 ### WalkRecord
@@ -122,7 +124,30 @@ A timed chunk of the meditation script. `atSecond` is the offset from "Begin wal
 type Role = 'participant' | 'medical_professional' | 'researcher'
 ```
 
-Only `participant` has a real flow. `medical_professional` and `researcher` currently land on the same admin placeholder and have no `Participant` record. Expect this to grow into a `User` entity with a role field once the admin views exist.
+`participant` uses the walk flow. `medical_professional` and `researcher` both land on the admin dashboard (`/admin`, `/admin/participants`, `/admin/settings`), have no `Participant` record, and are currently indistinguishable in what they can do. Expect this to grow into a `User` entity with a role field, and for the two admin roles to diverge (e.g. only `researcher` exports data).
+
+## Admin entities
+
+Read-only projections and settings used by the admin screens. Defined in `types.ts` under "Admin / researcher dashboard".
+
+### ConditionSetting
+
+An experimental arm as edited on the Settings screen. Per the decision log, a condition changes the meditation script; `voice` and `age` describe the text-to-speech persona that reads it.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `string` | Short id, `A`, `B`, … Referenced by `Participant.condition` |
+| `name` | `string` | Display name, "Condition A" |
+| `voice` | `string` | TTS persona, e.g. "Male", "Female", "Neutral" |
+| `age` | `number` | Apparent age of the voice persona |
+
+### AdminParticipantItem
+
+One row of the participant list (`GET /admin/participants`): `id`, `condition`, `status` (`Not started | In progress | Completed`), `walkCount`, `lastWalkAt`, and two placeholder labels `stressStart` / `stressEnd` derived client-side from the "tense" item of the latest walk. The labels are a stand-in for the backend's `GET /admin/stats` and should be deleted when that exists, per [Derived scores](#derived-scores).
+
+### CreateParticipantResult
+
+Returned by `createAdminParticipant(conditionId)`: the new `AdminParticipantItem` plus the single-use `accessCode`, which the API returns exactly once and the UI shows exactly once.
 
 ## Client-side session state
 
@@ -175,6 +200,11 @@ All functions in `frontend/src/api/index.ts` are `async` and are the only place 
 | `generateRoutes(duration)` → `RouteOption[]` | `POST /routes/generate` | Will need the full `WalkPlan` (locations, type) once routing is real |
 | `getScript(durationMinutes)` → `ScriptSegment[]` | `GET /scripts?condition=A&duration=15` | Scripts differ per condition. The backend should resolve the condition from the session rather than trusting a query param, so the frontend can't request the wrong arm's script |
 | `saveWalk(record)` → `WalkRecord` | `POST /walks` | Backend should assign `id` and validate `participantId` against the session |
+| `getAdminConditions()` → `ConditionSetting[]` | `GET /admin/conditions` | Admin roles only |
+| `saveAdminConditions(list)` → `ConditionSetting[]` | `PUT /admin/conditions/{id}` | Mock saves the whole list; the real API edits one condition at a time |
+| `getAdminParticipants()` → `AdminParticipantItem[]` | `GET /admin/participants` | Newest joined first; walk count and status derived server-side |
+| `createAdminParticipant(conditionId)` → `CreateParticipantResult` | `POST /admin/participants` | Server assigns the `AAA###` id and generates the access code |
+| `getAdminWalks()` → `WalkRecord[]` (with `condition`) | `GET /admin/export.csv` | Only used to build the CSV client-side until the backend serves the file |
 
 ## Derived scores
 

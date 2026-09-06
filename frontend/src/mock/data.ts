@@ -1,5 +1,7 @@
 import type {
+  ConditionSetting,
   Participant,
+  Role,
   RouteOption,
   RouteType,
   ScriptSegment,
@@ -13,18 +15,30 @@ import type {
 // Python/Mongo backend exists.
 // ---------------------------------------------------------------------------
 
-export const MOCK_PARTICIPANT: Participant = {
-  id: 'AAA001',
-  displayName: 'Participant AAA001',
-  condition: 'A',
-  joinedAt: '2026-08-12T09:00:00.000Z',
-}
+/** Admin / researcher demo logins. Listed in the README and on the login screen. */
+export const MOCK_ADMIN_CREDENTIALS: Array<{ userId: string; password: string; role: Role }> = [
+  { userId: 'admin', password: 'admin', role: 'researcher' },
+  { userId: 'doctor', password: 'doctor', role: 'medical_professional' },
+]
 
 /** Any of these credentials log in as the mock participant. */
 export const MOCK_CREDENTIALS = [
   { userId: 'AAA001', password: 'password' },
   { userId: 'demo', password: 'demo' },
 ]
+
+/** Experimental arms. Editable by admins on the Settings screen. */
+export const MOCK_CONDITIONS: ConditionSetting[] = [
+  { id: 'A', name: 'Condition A', voice: 'Male', age: 30 },
+  { id: 'B', name: 'Condition B', voice: 'Female', age: 30 },
+]
+
+export const MOCK_PARTICIPANT: Participant = {
+  id: 'AAA001',
+  displayName: 'Participant AAA001',
+  condition: 'A',
+  joinedAt: '2026-08-12T09:00:00.000Z',
+}
 
 export const SURVEY_ITEMS: SurveyItem[] = [
   { key: 'calm', statement: 'I feel calm' },
