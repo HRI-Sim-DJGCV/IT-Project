@@ -7,8 +7,9 @@ A guided walking-meditation app for a stress regulation trial. Participants chec
 | Folder | What | Status |
 |---|---|---|
 | `frontend/` | React + TypeScript mobile web app (Vite, Tailwind, React Router) | Participant flow and admin dashboard built with mock data |
-| `backend/` | Python API + MongoDB | Not started |
-| `docs/` | Project documentation — [frontend-domain-model.md](docs/frontend-domain-model.md), [backend-api-spec.md](docs/backend-api-spec.md) (draft) | |
+| `backend/` | Node + TypeScript API (Express, Mongoose, Zod, JWT) over MongoDB Atlas | Phase 1 participant endpoints and the admin endpoints implemented; frontend not yet switched over |
+| `shared/` | Domain types and the calm-score rule, imported by the backend (and by the frontend once it switches from its local copy) | |
+| `docs/` | Project documentation — [frontend-domain-model.md](docs/frontend-domain-model.md), [backend-api-spec.md](docs/backend-api-spec.md) | |
 
 ## Running the frontend
 
@@ -47,12 +48,28 @@ npm run preview   # serve the production build locally
 npm run lint      # oxlint
 ```
 
+## Running the backend
+
+Requires Node.js 20+ and access to the team's MongoDB Atlas cluster.
+
+```bash
+cd backend
+cp .env.example .env     # then fill in MONGODB_URI and JWT_SECRET (see comments in the file)
+npm install
+npm run seed             # idempotent: conditions A/B, the demo logins above, two sample walks
+npm run dev              # http://localhost:8000/v1, reloads on save
+```
+
+`GET /v1/health` reports the database connection. The seeded logins are the same as the frontend's demo logins (`demo`/`demo`, `admin`/`admin`, `doctor`/`doctor`), so the frontend can be pointed at the API without changing any accounts. Endpoints, collections and error format are in [docs/backend-api-spec.md](docs/backend-api-spec.md).
+
+The backend uses the `accounts`, `conditions` and `walkRecords` collections in the `walkingapp` database. Other collections in that database belong to the landmark-guided walk model planned for a later phase; their Mongoose schemas are in `backend/src/models/` but no endpoint uses them yet.
+
 ## Deploying to Vercel
 
 Import the repo in Vercel and set **Root Directory** to `frontend`. The SPA rewrite in `frontend/vercel.json` handles client-side routes.
 
 ## Notes
 
-- All data is currently mocked in `frontend/src/mock/data.ts` and served through `frontend/src/api/index.ts`. Replace the functions in `api/` with real requests once the backend exists.
+- The frontend still uses mock data from `frontend/src/mock/data.ts` served through `frontend/src/api/index.ts`. Switching it to the backend is confined to that file plus token handling; see section 6 of the API spec.
 - The map on the walk screens is a placeholder pending a map provider.
 - The meditation script is read aloud with the browser's built-in speech synthesis.
