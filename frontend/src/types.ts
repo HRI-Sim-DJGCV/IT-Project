@@ -28,6 +28,10 @@ export type RouteType = 'loop' | 'out_and_back' | 'quiet_streets' | 'green_space
 export interface WalkPlan {
   startLocation: string
   endLocation: string
+  startCoordinates?: {
+    lat: number
+    lon: number
+  }
   duration: WalkDuration
   routeType: RouteType
 }
@@ -40,6 +44,11 @@ export interface RouteOption {
   estimatedMinutes: number
   /** Simple polyline in 0–100 unit space, used by the placeholder map */
   path: Array<[number, number]>
+  /**
+   * Real geographic route points in [latitude, longitude] order
+   * Optional so existing mock routes continue to work
+   */
+  mapPath?: Array<[number, number]>
 }
 
 export interface ScriptSegment {
