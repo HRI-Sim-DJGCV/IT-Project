@@ -1,20 +1,23 @@
-# Backend API specification (draft)
+# Backend API specification
 
-**Status:** draft, not implemented. Companion to [frontend-domain-model.md](frontend-domain-model.md); entity shapes are defined there and referenced here.
+**Status:** implemented in [`backend/`](../backend/) (phase 1 participant endpoints and the phase 2 admin endpoints). The frontend still calls its mock layer; see §6 for the switch. Companion to [frontend-domain-model.md](frontend-domain-model.md); entity shapes are defined there and referenced here.
 
-The backend is a Python HTTP API over MongoDB that the React frontend calls in place of its current mock layer ([`frontend/src/api/index.ts`](../frontend/src/api/index.ts)). Phase 1 covers everything the participant app needs. Phase 2 (admin/researcher) is sketched so the data model doesn't paint us into a corner, but is not required for the first backend release.
+The backend is a Node/TypeScript HTTP API over MongoDB that the React frontend calls in place of its current mock layer ([`frontend/src/api/index.ts`](../frontend/src/api/index.ts)). The team chose TypeScript over the originally drafted Python so the frontend and backend share one language, one toolchain and, via [`shared/`](../shared/), one copy of the domain types and the scoring rule.
 
 ## 1. Stack and conventions
 
-| Concern | Recommendation | Why |
+| Concern | Choice | Why |
 |---|---|---|
-| Framework | **FastAPI** | Async, typed request/response models via Pydantic, auto-generated OpenAPI docs at `/docs` — the frontend team can read the contract without this file |
-| Mongo driver | **Motor** (async) via **Beanie** ODM, or Motor directly | Beanie gives Pydantic-typed documents that mirror `types.ts` closely |
+| Framework | **Express 5** | Most widely known Node server; async handlers propagate errors to the one error handler |
+| Mongo driver | **Mongoose** | Schema-typed documents that mirror `shared/types.ts`; the teammate's draft collections were also created with Mongoose |
+| Validation | **Zod** schema for every request body and query (`backend/src/validation.ts`) | Rejects bad input before it touches the DB, with a per-field error list |
 | Auth | Short-lived **JWT** (access token) in an `Authorization: Bearer` header | Stateless, works across Vercel (frontend) and a separate API host; no cookie/CORS complications |
-| Passwords | `bcrypt` via `passlib` | Standard |
-| Validation | Pydantic models for every request and response | Rejects bad input before it touches the DB |
-| Hosting | Any container host (Render, Railway, Fly.io) or a small VM. **Not Vercel** — Vercel's Python functions are fine for tiny handlers but awkward for a persistent Mongo connection | |
-| Database | MongoDB Atlas free tier | Managed, has a free tier, IP allow-list |
+| Passwords | `bcryptjs`, cost 10 | Standard |
+| Shared code | `shared/types.ts`, `shared/survey.ts`, `shared/scoring.ts` | One definition of the wire types, the survey items and the calm-score rule |
+| Hosting | Any container host (Render, Railway, Fly.io) or a small VM. **Not Vercel** (persistent Mongo connection) | |
+| Database | MongoDB Atlas, database `walkingapp` | The team's existing cluster; see §3 for collection naming |
+
+Run locally with `npm run dev` in `backend/` (see the README). Environment variables are documented in `backend/.env.example`.
 
 **Base URL:** `https://api.<domain>/v1` (dev: `http://localhost:8000/v1`). Version prefix from day one so breaking changes can go to `/v2`.
 
@@ -81,7 +84,7 @@ Response `200`:
 
 `participant` is `null` for non-participant roles.
 
-Errors: `INVALID_CREDENTIALS`. Rate-limit by user ID + IP (e.g. 10/min) to slow guessing.
+Errors: `INVALID_CREDENTIALS`. Rate-limited to 20 requests per minute per IP (`429`); `/auth/access-code` has its own separate bucket. User IDs are matched case-insensitively (`demo` and `DEMO` are the same account).
 
 ### 2.2 `GET /me`
 
@@ -122,7 +125,7 @@ Response `200`:
 { "routes": [ <RouteOption>, <RouteOption>, <RouteOption> ] }
 ```
 
-Phase 1 may return the same three template routes the mock does. When a map/routing provider is chosen this endpoint calls it server-side (keeps the provider API key off the client) and `RouteOption.path` changes to real geometry — see open question in the domain model. Always return exactly three options so the UI doesn't need to handle variable counts.
+Phase 1 returns the same three template routes the mock did (`backend/src/services/routeTemplates.ts`). Until routing is real only `duration` is required; the other plan fields are accepted and ignored, so the current frontend (which sends just the duration) works unchanged. When a map/routing provider or the landmark model is adopted this endpoint calls it server-side (keeps the provider API key off the client) and `RouteOption.path` changes to real geometry — see open question in the domain model. Always return exactly three options so the UI doesn't need to handle variable counts.
 
 ### 2.5 `GET /scripts`
 
@@ -165,14 +168,19 @@ Validation:
 - `preSurvey` and `postSurvey` must both be present and contain exactly the active survey item keys, each 1–4.
 - `duration` ∈ {15, 30, 45}; `routeType` ∈ the four known values; `actualMinutes` ≥ 1.
 - `clientId` is the frontend's draft id; the server uses it as an **idempotency key** so a retried request doesn't create a duplicate (second attempt returns the existing record with `200`, not `409`).
+- **Compatibility:** the current frontend posts its whole `WalkRecord` (`id`, `participantId`, `completed`, …). The server accepts `id` as an alias for `clientId` and ignores `participantId` and `completed`; identity always comes from the token. Unknown fields are dropped.
+- `scriptVersion` is optional; when absent the condition's current version is recorded.
+- `condition` is copied onto the walk from the **account** at save time (not from the token), so a reassignment after login is honoured.
 
-Response `201` — the stored `WalkRecord` with server-assigned `id`, `participantId` (from token), `completed: true`, and `scores`.
+Response `201` — the stored `WalkRecord` with server-assigned `id`, `participantId` (from token), `condition`, `completed: true`, `scriptVersion` and `scores`.
 
 ## 3. MongoDB collections
 
-Collection names are plural, documents mirror the domain model. Field names are camelCase to match the frontend exactly (no snake_case translation layer to maintain).
+Documents mirror the domain model. Field names are camelCase to match the frontend exactly (no snake_case translation layer to maintain). Mongoose models live in `backend/src/models/`; indexes are declared there and synced on every server start (`syncIndexes`), so no manual index setup is needed.
 
-### `users`
+**Naming.** All three collections live in the team's `walkingapp` database, alongside the draft collections for the later landmark-guided model (`users`, `walks`, `routes`, `landmarks`, `scriptsegments`, `audiofiles`, `voiceprofiles`, `firebaseusers`). To avoid colliding with those drafts, this API uses **`accounts`** (this spec's "users") and **`walkRecords`** (this spec's "walks"). Mongoose schemas for the draft collections are checked in under `backend/src/models/` (`User`, `Walk`, `Route`, `Landmark`, `ScriptSegment`, `AudioFile`, `VoiceProfile`, `SessionLog`, `FirebaseUser`) for the later phase, but no endpoint uses them and the server does not register them, so their indexes are not touched on startup.
+
+### `accounts`
 
 One document per login, all roles.
 
@@ -180,10 +188,10 @@ One document per login, all roles.
 {
   "_id": "AAA001",                 // login user ID; participant IDs are AAA### style
   "role": "participant",           // participant | medical_professional | researcher
-  "passwordHash": "...",
+  "passwordHash": "...",           // null until the access code is redeemed
   "displayName": "Participant AAA001",
   "condition": "A",                // participants only; references conditions._id
-  "accessCode": "K7P2-QX9M",       // participants only; issued by admin, cleared on first use
+  "accessCodeHash": "…sha256…",    // participants only; the code itself is never stored; null after redemption
   "accessCodeUsedAt": null,
   "joinedAt": "2026-08-12T09:00:00Z",
   "createdBy": "researcher01",     // admin who created the account
@@ -191,9 +199,9 @@ One document per login, all roles.
 }
 ```
 
-Indexes: `_id` (default), `{ role: 1 }`, `{ accessCode: 1 }` unique sparse.
+Indexes: `_id` (default), `{ role: 1 }`, `{ accessCodeHash: 1 }` unique, partial (only documents where it is a string; a sparse index would still index the many `null`s and collide).
 
-### `walks`
+### `walkRecords`
 
 One document per completed walk. Surveys, plan and route are embedded — a walk is read as a unit and never partially updated.
 
@@ -265,38 +273,44 @@ Every `WalkRecord` the API returns includes:
 }
 ```
 
-`scoringVersion: 1` definition — for each survey: sum of positive items (`calm`, `at_ease`) plus reverse-scored negatives (`5 − score` for `tense`, `worried`). Range 4–16. Put this in one function (`scoring.py`) used by the walks endpoints and the CSV export alike. When the frontend switches to the real API, delete the client-side copy in `History.tsx`.
+`scoringVersion: 1` definition — for each survey: sum of positive items (`calm`, `at_ease`) plus reverse-scored negatives (`5 − score` for `tense`, `worried`). Range 4–16. It lives in one function, [`shared/scoring.ts`](../shared/scoring.ts), used by the walks endpoints, `GET /admin/stats` and the CSV export alike. When the frontend switches to the real API, delete the client-side copy in `History.tsx` (or import the shared one).
 
-## 5. Phase 2 — admin / researcher endpoints (sketch)
+## 5. Phase 2 — admin / researcher endpoints
 
-Require `role ∈ { medical_professional, researcher }`. Not needed for the first backend release; listed so `users` and `conditions` are designed with them in mind.
+Implemented, because the admin dashboard (PR #2) already calls them. Require `role ∈ { medical_professional, researcher }`; a participant token gets `403`. List responses are wrapped in an object (`{ "participants": [...] }`, `{ "conditions": [...] }`, `{ "walks": [...] }`) so fields can be added later without a breaking change.
 
 | Method & path | Purpose |
 |---|---|
-| `GET /admin/participants` | List participants with condition, join date, walk count, last walk |
-| `POST /admin/participants` | Create a participant: body is `{ "condition": "A" }` only. Server assigns the next `AAA###` id and generates the access code. Returns `{ participant, accessCode }`; the code is never returned again |
-| `PATCH /admin/participants/{id}` | Change condition / deactivate |
+| `GET /admin/participants` | `{ participants: AdminParticipantItem[] }`, most recently joined first. Each item: `id`, `condition`, `status` (`Not started` / `Completed`; `In progress` is reserved), `walkCount`, `lastWalkAt`, `active`, plus `stressStart` / `stressEnd` labels for the "tense" item of the latest walk (kept for the current UI; prefer `scores` from the walks endpoints) |
+| `POST /admin/participants` | Create a participant: body is `{ "condition": "A" }` only. Server assigns the next `AAA###` id and generates the access code. Returns `201 { participant, accessCode }`; the code is never returned again (only its hash is stored). `409` if the condition does not exist |
+| `PATCH /admin/participants/{id}` | Body `{ condition?, active? }`. Change condition / deactivate (a deactivated participant can no longer log in) |
 | `GET /admin/participants/{id}/walks` | A participant's walks (same shape as `/me/walks`) |
-| `GET /admin/conditions` · `PUT /admin/conditions/{id}` | Read/edit conditions and their scripts (bumps `scriptVersion`) |
-| `GET /admin/stats` | Counts per condition, mean pre/post/delta per condition — feeds the dashboard |
-| `GET /admin/export.csv` | One row per walk: participant id, condition, date, duration, distance, actual minutes, every raw survey answer pre/post, scores, `scriptVersion`, `surveyVersion` |
-| `POST /auth/access-code` (public) | Participant's first login: exchange an access code for a token and set a password. Backs the "Access with code" button |
+| `GET /admin/conditions` | `{ conditions: ConditionSetting[] }` (`id`, `name`, `voice`, `age`) |
+| `PUT /admin/conditions` | Replace the whole settings list, as the admin Settings screen saves it (body: `ConditionSetting[]` or `{ conditions: [...] }`). New ids are created with the default script; existing ones keep their script; nothing is deleted because participants and walks reference conditions. `409` on duplicate ids |
+| `PUT /admin/conditions/{id}` | Edit one condition: any of `name`, `voice`, `age`, `script`. Changing `script` pushes the old one to `scriptHistory` and bumps `scriptVersion`. Creates the condition (`201`) if the id is new and `name`, `voice`, `age` are all given |
+| `GET /admin/walks` | `{ walks: WalkRecord[] }` across all participants, newest first, each with `condition` and `scores`. Feeds the client-side CSV until the UI uses `export.csv` |
+| `GET /admin/stats` | `{ scoringVersion, totals: { participants, walks }, perCondition: [{ condition, name, participants, walks, meanPreCalm, meanPostCalm, meanDeltaCalm }] }` — feeds the dashboard |
+| `GET /admin/export.csv` | `text/csv` download, one row per walk: participant id, condition, walk id, date, planned minutes, route type, route name, distance, actual minutes, completed, every raw survey answer pre/post, the three calm scores, `scoring_version`, `script_version`, `survey_version` |
+| `POST /auth/access-code` (public) | Participant's first login. Body `{ userId, accessCode, password }` (password ≥ 8 chars). Verifies the code against the stored hash (case-insensitive), sets the password, clears the code, and returns the same body as `/auth/login`. A used, wrong or missing code is `INVALID_CREDENTIALS`. Backs the "Access with code" button |
 
 ## 6. Frontend migration checklist
 
-When the backend exists, the frontend change is confined to one file plus token handling:
+The backend exists; the frontend change is confined to one file plus token handling:
 
-1. Add `VITE_API_BASE_URL` to `frontend/.env` (and the Vercel project env).
-2. Rewrite each function in `frontend/src/api/index.ts` as a `fetch` to the matching endpoint; keep the function signatures so no component changes.
+1. Add `VITE_API_BASE_URL` to `frontend/.env` (and the Vercel project env). Dev value: `http://localhost:8000/v1`.
+2. Rewrite each function in `frontend/src/api/index.ts` as a `fetch` to the matching endpoint; keep the function signatures so no component changes. Note the list envelopes: `GET /me/walks` → `.walks`, `GET /admin/participants` → `.participants`, `GET /admin/conditions` → `.conditions`, `GET /admin/walks` → `.walks`; `saveAdminConditions(list)` → `PUT /admin/conditions`.
 3. Store the JWT in memory + `sessionStorage` inside `SessionContext`; attach it as `Authorization` in the API layer; on `401`, call `signOut()`.
-4. Pass `scriptVersion` from `GET /scripts` through the `WalkDraft` to `POST /me/walks`.
+4. Pass `scriptVersion` from `GET /scripts` through the `WalkDraft` to `POST /me/walks` (optional; the server defaults it).
 5. Read `scores` from the API in `History.tsx` and delete `calmScore()`.
-6. Delete `frontend/src/mock/data.ts` (or keep behind a `VITE_USE_MOCK=true` flag for offline demos — recommended, since the phone-frame demo is useful without a backend).
+6. Point `frontend/src/types.ts` imports at `shared/types.ts` (identical shapes, plus `scores`) so the two sides cannot drift.
+7. Delete `frontend/src/mock/data.ts` (or keep behind a `VITE_USE_MOCK=true` flag for offline demos — recommended, since the phone-frame demo is useful without a backend).
 
 ## 7. Open points
 
 - **Token lifetime vs. walk length.** A 45-minute walk plus surveys must fit inside the token's life. 24 h is safe; don't go shorter than 2 h without refresh tokens.
 - **Routing provider.** Decide before implementing `/routes/generate` for real. It changes `RouteOption.path`'s format and adds a server-side API key.
-- **Where the calm-score rule is documented for the ethics/research protocol.** `scoring.py` should cite it.
+- **Where the calm-score rule is documented for the ethics/research protocol.** `shared/scoring.ts` should cite it.
+- **Landmark model.** The draft collections for landmark-guided walks (routes with GeoJSON, landmarks, per-landmark script segments, audio files, voice profiles) coexist in `walkingapp`. When that phase starts, `POST /routes/generate` and `GET /scripts` are the integration points; `walkRecords` can gain a `landmarkEvents` array without a breaking change. Conditions' `voice`/`age` likely map onto `voiceprofiles`.
+- **Collection rename.** `accounts` / `walkRecords` were chosen to avoid the draft `users` / `walks`. If the drafts are dropped or moved to another database, the team may rename to the spec's original names.
 - **Backups / data retention** for a research dataset — Atlas snapshots are probably sufficient, but confirm with the research lead.
-- **Health notes on participants.** The first admin UI draft (PR #2) had a free-text "clinical notes / contraindications" field per participant. It was removed before merge: participants are anonymised `AAA###` ids and storing clinical notes changes the data-protection and ethics posture of the trial. Do not add such a field to `users` until the research lead confirms it is covered by the protocol, and if it is, specify who can read it (probably `medical_professional` only) and whether it is excluded from exports.
+- **Health notes on participants.** The first admin UI draft (PR #2) had a free-text "clinical notes / contraindications" field per participant. It was removed before merge: participants are anonymised `AAA###` ids and storing clinical notes changes the data-protection and ethics posture of the trial. Do not add such a field to `accounts` until the research lead confirms it is covered by the protocol, and if it is, specify who can read it (probably `medical_professional` only) and whether it is excluded from exports.
