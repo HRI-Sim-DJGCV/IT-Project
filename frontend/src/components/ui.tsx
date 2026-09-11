@@ -1,5 +1,15 @@
+import { forwardRef } from 'react'
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Box,
+  Button as MuiButton,
+  Card as MuiCard,
+  Typography,
+  TextField,
+  Alert,
+  IconButton
+} from '@mui/material'
 
 // ---------------------------------------------------------------------------
 // Layout
@@ -13,7 +23,6 @@ interface ScreenProps {
   right?: ReactNode
 }
 
-/** Phone-sized page shell with safe-area padding and optional sticky footer. */
 export function Screen({ title, back, children, footer, right }: ScreenProps) {
   const navigate = useNavigate()
   return (
@@ -24,18 +33,19 @@ export function Screen({ title, back, children, footer, right }: ScreenProps) {
           style={{ paddingTop: 'max(env(safe-area-inset-top), var(--safe-top, 12px))', paddingBottom: 12 }}
         >
           {back ? (
-            <button
-              type="button"
+            <IconButton
               aria-label="Back"
               onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
-              className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-primary active:bg-line"
+              sx={{ ml: -1, color: 'primary.main' }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
-            </button>
+            </IconButton>
           ) : null}
-          <h1 className="flex-1 truncate text-lg font-semibold">{title}</h1>
+          <Typography variant="h6" className="flex-1 truncate text-ink" sx={{ fontWeight: 600 }}>
+            {title}
+          </Typography>
           {right}
         </header>
       )}
@@ -56,14 +66,18 @@ export function Screen({ title, back, children, footer, right }: ScreenProps) {
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-line bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>
+    <MuiCard variant="outlined" className={className} sx={{ borderRadius: 3, p: 2, borderColor: 'divider', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
       {children}
-    </div>
+    </MuiCard>
   )
 }
 
 export function SectionLabel({ children }: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-wide text-muted">{children}</p>
+  return (
+    <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
+      {children}
+    </Typography>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -75,16 +89,25 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   full?: boolean
 }
 
-export function Button({ variant = 'primary', full = true, className = '', ...rest }: ButtonProps) {
-  const base =
-    'inline-flex h-12 items-center justify-center rounded-xl px-5 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100'
-  const styles = {
-    primary: 'bg-primary text-white active:bg-primary-hover',
-    secondary: 'border border-primary bg-card text-primary active:bg-accent',
-    ghost: 'bg-transparent text-primary underline-offset-4 active:underline',
-    danger: 'bg-red-600 text-white active:bg-red-700',
-  }[variant]
-  return <button type="button" {...rest} className={`${base} ${styles} ${full ? 'w-full' : ''} ${className}`} />
+export function Button({ variant = 'primary', full = true, className = '', children, ...rest }: ButtonProps) {
+  const muiVariant = variant === 'ghost' ? 'text' : variant === 'secondary' ? 'outlined' : 'contained'
+  const color = variant === 'danger' ? 'error' : 'primary'
+
+  return (
+    <MuiButton
+      variant={muiVariant}
+      color={color}
+      fullWidth={full}
+      className={className}
+      disableElevation
+      sx={{ height: 48, borderRadius: 3 }}
+      onClick={rest.onClick}
+      disabled={rest.disabled}
+      type={rest.type as any}
+    >
+      {children}
+    </MuiButton>
+  )
 }
 
 interface FieldProps {
@@ -95,24 +118,49 @@ interface FieldProps {
 
 export function Field({ label, hint, children }: FieldProps) {
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">{label}</span>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      <Typography variant="body2" sx={{ fontWeight: 500 }}>{label}</Typography>
       {children}
-      {hint ? <span className="text-xs text-muted">{hint}</span> : null}
-    </label>
+      {hint && <Typography variant="caption" color="text.secondary">{hint}</Typography>}
+    </Box>
   )
 }
 
-const inputClass =
-  'h-12 w-full rounded-xl border border-line bg-card px-3 text-base outline-none focus:border-primary focus:ring-2 focus:ring-accent'
+export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  (props, ref) => {
+    return (
+      <TextField
+        {...(props as any)}
+        inputRef={ref}
+        variant="outlined"
+        fullWidth
+        InputProps={{ sx: { borderRadius: 3, backgroundColor: 'background.paper' } }}
+      />
+    )
+  }
+)
 
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${inputClass} ${props.className ?? ''}`} />
-}
-
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`${inputClass} appearance-none ${props.className ?? ''}`} />
-}
+// log in drop down bug dennis WIP
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  ({ children, className = '', ...props }, ref) => {
+    return (
+      <div className="relative w-full">
+        <select
+          ref={ref}
+          {...props}
+          className={`w-full appearance-none rounded-xl border border-line bg-white px-4 py-3.5 pr-10 text-ink shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 ${className}`}
+        >
+          {children}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+    )
+  }
+)
 
 interface ChipsProps<T extends string | number> {
   options: Array<{ value: T; label: string }>
@@ -121,7 +169,6 @@ interface ChipsProps<T extends string | number> {
   columns?: 2 | 3 | 4
 }
 
-/** Single-select pill group — better for thumbs than a native select. */
 export function Chips<T extends string | number>({ options, value, onChange, columns = 3 }: ChipsProps<T>) {
   const cols = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' }[columns]
   return (
@@ -129,18 +176,16 @@ export function Chips<T extends string | number>({ options, value, onChange, col
       {options.map((o) => {
         const selected = o.value === value
         return (
-          <button
+          <MuiButton
             key={String(o.value)}
-            type="button"
-            role="radio"
-            aria-checked={selected}
+            variant={selected ? 'contained' : 'outlined'}
+            color="primary"
             onClick={() => onChange(o.value)}
-            className={`h-11 rounded-xl border px-2 text-sm font-medium transition active:scale-[0.97] ${
-              selected ? 'border-primary bg-primary text-white' : 'border-line bg-card text-ink'
-            }`}
+            disableElevation
+            sx={{ borderRadius: 3, height: 44, textTransform: 'none', fontWeight: 500 }}
           >
             {o.label}
-          </button>
+          </MuiButton>
         )
       })}
     </div>
@@ -150,8 +195,8 @@ export function Chips<T extends string | number>({ options, value, onChange, col
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null
   return (
-    <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+    <Alert severity="error" sx={{ borderRadius: 3 }}>
       {children}
-    </p>
+    </Alert>
   )
 }

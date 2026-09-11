@@ -61,7 +61,7 @@ export function Login() {
                 onChange={(e) => setUserId(e.target.value)}
                 autoComplete="username"
                 autoCapitalize="characters"
-                placeholder={role === 'participant' ? 'e.g. AAA001' : 'Your ID'}
+                placeholder={role === 'participant' ? 'demo' : 'admin'}
                 required
               />
             </Field>
