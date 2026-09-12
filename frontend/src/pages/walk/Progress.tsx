@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getScript } from '../../api'
-import { MapPlaceholder } from '../../components/MapPlaceholder'
+import { RouteMap } from '../../components/RouteMap'
 import { Button, Card, Screen } from '../../components/ui'
 import { useSession } from '../../context/SessionContext'
 import { useSpeech } from '../../hooks/useSpeech'
@@ -105,7 +105,7 @@ export function Progress() {
         )
       }
     >
-      <MapPlaceholder route={draft?.route} progress={phase === 'ready' ? 0 : progress} className="h-56" />
+      <RouteMap route={draft?.route} progress={phase === 'ready' ? 0 : progress} className="h-56" />
 
       <div className="text-center">
         <p className="text-4xl font-semibold tabular-nums">{fmt(remaining)}</p>

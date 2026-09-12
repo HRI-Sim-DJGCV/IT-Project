@@ -1,0 +1,11 @@
+services:
+  walking-meditation-server:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    # Uncomment for auto-reload during development (requires --reload on uvicorn CMD too)
+    # command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload

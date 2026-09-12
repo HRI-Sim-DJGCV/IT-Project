@@ -9,9 +9,10 @@ import {
   MOCK_PARTICIPANT,
   MOCK_WALK_HISTORY,
   SURVEY_SCALE,
-  buildRouteOptions,
   buildScript,
 } from '../mock/data'
+
+
 import type {
   AdminParticipantItem,
   ConditionSetting,
@@ -22,9 +23,29 @@ import type {
   RouteOption,
   ScriptSegment,
   SurveyScore,
-  WalkDuration,
+  WalkPlan,
   WalkRecord,
 } from '../types'
+
+// Converts Google’s encoded route line into points that our map component can draw.
+import { decodeRoutePath } from './routePath'
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+
+export interface ServerHealth {
+  status: string
+}
+
+export async function checkServerHealth(): Promise<ServerHealth> {
+  const response = await fetch(`${API_BASE_URL}/health`)
+
+  if (!response.ok) {
+    throw new Error(`Server returned status ${response.status}`)
+  }
+
+  return (await response.json()) as ServerHealth
+}
 
 const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 
@@ -76,10 +97,95 @@ export async function getWalkHistory(participantId: string): Promise<WalkRecord[
   return newestFirst(walks.filter((w) => w.participantId === participantId))
 }
 
-/** POST /routes/generate */
-export async function generateRoutes(duration: WalkDuration): Promise<RouteOption[]> {
-  await delay(600) // pretend to compute
-  return buildRouteOptions(duration)
+// /** POST /routes/generate */
+// export async function generateRoutes(duration: WalkDuration): Promise<RouteOption[]> {
+//   await delay(600) // pretend to compute
+//   return buildRouteOptions(duration)
+// }
+
+interface ServerRouteResponse {
+  baseline: {
+    duration_s: number
+    distance_m: number
+    polyline: string
+  }
+}
+
+const routeRequestCache = new Map<string, Promise<RouteOption[]>>()
+
+/** Converts a text-based walk plan into a real server-generated route. */
+export async function generateRoutes(
+  plan: WalkPlan,
+): Promise<RouteOption[]> {
+  const cacheKey = JSON.stringify([
+    plan.startLocation.trim().toLowerCase(),
+    plan.endLocation.trim().toLowerCase(),
+    plan.duration,
+  ])
+
+  const cached = routeRequestCache.get(cacheKey)
+  if (cached) return cached
+
+  const request = (async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/route/generate-from-text`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          start_location: plan.startLocation,
+          end_location: plan.endLocation,
+          total_travel_time: plan.duration * 60,
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as
+        | { detail?: string }
+        | null
+
+      throw new Error(
+        body?.detail ?? `Server returned status ${response.status}`,
+      )
+    }
+
+    const data = (await response.json()) as ServerRouteResponse
+
+    // Produce coordinates for both the progress drawing and Leaflet map.
+    const { drawingPath, mapPath } = decodeRoutePath(
+      data.baseline.polyline,
+    )
+
+    return [
+      {
+        id: 'live-generated-route',
+        name: 'Generated walking route',
+        description: `${plan.startLocation} → ${plan.endLocation}`,
+        distanceKm: Number(
+          (data.baseline.distance_m / 1000).toFixed(2),
+        ),
+        estimatedMinutes: Math.ceil(
+          data.baseline.duration_s / 60,
+        ),
+        path: drawingPath,
+        mapPath,
+      },
+    ]
+  })()
+
+  // React development mode can load an effect twice.
+  // Caching prevents duplicate Google requests for the same plan.
+  routeRequestCache.set(cacheKey, request)
+
+  try {
+    return await request
+  } catch (error) {
+    routeRequestCache.delete(cacheKey)
+    throw error
+  }
 }
 
 /** GET /scripts */
