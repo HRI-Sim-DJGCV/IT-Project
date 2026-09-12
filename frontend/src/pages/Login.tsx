@@ -28,7 +28,7 @@ export function Login() {
     setError(null)
     try {
       const res = await login(role, userId, password)
-      signIn(res.role, res.participant)
+      signIn(res)
       navigate(res.role === 'participant' ? '/home' : '/admin', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.')
@@ -78,13 +78,20 @@ export function Login() {
             <Button type="submit" disabled={busy}>
               {busy ? 'Logging in…' : 'Log in'}
             </Button>
-            <p className="text-center text-xs text-muted">
-              {role === 'participant'
-                ? 'Demo: user ID “demo”, password “demo”'
-                : role === 'researcher'
-                  ? 'Demo: user ID “admin”, password “admin”'
-                  : 'Demo: user ID “doctor”, password “doctor”'}
-            </p>
+            {role === 'participant' ? (
+              <button type="button" onClick={() => navigate('/access-code')} className="text-center text-sm text-primary">
+                First time? Log in with your access code
+              </button>
+            ) : null}
+            {import.meta.env.DEV ? (
+              <p className="text-center text-xs text-muted">
+                {role === 'participant'
+                  ? 'Seeded dev login: “demo” / “demo”'
+                  : role === 'researcher'
+                    ? 'Seeded dev login: “admin” / “admin”'
+                    : 'Seeded dev login: “doctor” / “doctor”'}
+              </p>
+            ) : null}
           </>
         ) : null}
       </form>

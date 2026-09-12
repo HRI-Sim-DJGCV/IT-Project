@@ -62,7 +62,8 @@ export function AdminSettings() {
     <AdminLayout title="Settings">
       <h2 className="text-lg font-bold text-ink">Conditions</h2>
       <p className="-mt-3 text-sm text-muted">
-        Each condition has its own script voice. Changes apply to new walks only.
+        Every walk's meditation is written by AI for that walk. A condition sets the voice that reads it (Male, Female,
+        Neutral, or a speaker name) and the apparent age of the guide. Changes apply to new walks only.
       </p>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
@@ -118,11 +119,7 @@ export function AdminSettings() {
           <div className="border-b border-line px-4 py-2 text-sm font-medium text-muted">Add condition</div>
           <div className="flex flex-col gap-3 p-3">
             <Field label="Voice">
-              <TextInput
-                placeholder="e.g. Neutral"
-                value={newVoice}
-                onChange={(e) => setNewVoice(e.target.value)}
-              />
+              <TextInput placeholder="e.g. Neutral" value={newVoice} onChange={(e) => setNewVoice(e.target.value)} />
             </Field>
             <Field label="Age">
               <TextInput

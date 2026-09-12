@@ -1,0 +1,46 @@
+# One deployable unit: the Node API (the only thing the app talks to) and the
+# internal Python AI service behind it. `mongo` is an optional local database
+# for development; point MONGODB_URI at Atlas instead for the real deployment.
+#
+#   docker compose up --build            # api + ai + local mongo
+#   docker compose up --build api ai     # api + ai against Atlas (MONGODB_URI in backend/.env)
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: backend/.env
+    environment:
+      AI_SERVICE_URL: http://ai:8001
+      AUDIO_DIR: /repo/backend/data/audio
+    ports:
+      - "8000:8000"
+    volumes:
+      - audio:/repo/backend/data/audio
+    depends_on:
+      - ai
+
+  ai:
+    build: ./server
+    env_file: server/.env
+    environment:
+      PORT: "8001"
+    # Not published: only the api container can reach it.
+    expose:
+      - "8001"
+    volumes:
+      # Hugging Face model cache so the TTS model is downloaded once.
+      - hf-cache:/root/.cache/huggingface
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo:/data/db
+
+volumes:
+  audio:
+  hf-cache:
+  mongo:

@@ -1,9 +1,0 @@
-env/
-.env
-__pycache__/
-*.pyc
-.git/
-.gitignore
-*.egg-info/
-.pytest_cache/
-.DS_Store

@@ -1,308 +1,133 @@
-// Mock API layer. Every component fetches data through these functions and
-// nowhere else, so swapping to the real backend means editing this file only.
-// See docs/backend-api-spec.md for the matching endpoints.
-
-import {
-  MOCK_ADMIN_CREDENTIALS,
-  MOCK_CONDITIONS,
-  MOCK_CREDENTIALS,
-  MOCK_PARTICIPANT,
-  MOCK_WALK_HISTORY,
-  SURVEY_SCALE,
-  buildScript,
-} from '../mock/data'
-
+// API layer. Every component fetches data through these functions and nowhere
+// else. Endpoints are documented in docs/backend-api-spec.md.
 
 import type {
   AdminParticipantItem,
   ConditionSetting,
   CreateParticipantResult,
+  LoginResponse,
   Participant,
-  ParticipantStatus,
+  PreparationResponse,
   Role,
   RouteOption,
-  ScriptSegment,
-  SurveyScore,
+  RoutesResponse,
+  SurveyResponse,
+  WalkHistoryResponse,
   WalkPlan,
+  WalkPreparation,
   WalkRecord,
 } from '../types'
+import { api, apiBlob } from './http'
 
-// Converts Google’s encoded route line into points that our map component can draw.
-import { decodeRoutePath } from './routePath'
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
-
-export interface ServerHealth {
-  status: string
-}
-
-export async function checkServerHealth(): Promise<ServerHealth> {
-  const response = await fetch(`${API_BASE_URL}/health`)
-
-  if (!response.ok) {
-    throw new Error(`Server returned status ${response.status}`)
-  }
-
-  return (await response.json()) as ServerHealth
-}
-
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms))
-
-// In-memory stores for data created during this session (reset on reload).
-let walks: WalkRecord[] = [...MOCK_WALK_HISTORY]
-let participants: Participant[] = [MOCK_PARTICIPANT]
-let conditions: ConditionSetting[] = [...MOCK_CONDITIONS]
-
-const newestFirst = (list: WalkRecord[]) => [...list].sort((a, b) => b.date.localeCompare(a.date))
+export { ApiError } from './http'
 
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
 export interface LoginResult {
+  token: string
+  expiresAt: string
   role: Role
   participant: Participant | null
 }
 
 /** POST /auth/login */
-export async function login(
-  role: Role,
-  userId: string,
-  password: string,
-): Promise<LoginResult> {
-  await delay()
-  const id = userId.trim().toLowerCase()
+export function login(role: Role, userId: string, password: string): Promise<LoginResult> {
+  return api<LoginResponse>('/auth/login', { method: 'POST', body: { role, userId, password }, anonymous: true })
+}
 
-  if (role !== 'participant') {
-    const adminOk = MOCK_ADMIN_CREDENTIALS.some(
-      (c) => c.role === role && c.userId.toLowerCase() === id && c.password === password,
-    )
-    if (!adminOk) throw new Error('Incorrect user ID or password.')
-    return { role, participant: null }
-  }
+/** POST /auth/access-code: first login. Redeems the single-use code and sets a password. */
+export function redeemAccessCode(userId: string, accessCode: string, password: string): Promise<LoginResult> {
+  return api<LoginResponse>('/auth/access-code', {
+    method: 'POST',
+    body: { userId, accessCode, password },
+    anonymous: true,
+  })
+}
 
-  const ok = MOCK_CREDENTIALS.some((c) => c.userId.toLowerCase() === id && c.password === password)
-  if (!ok) throw new Error('Incorrect user ID or password.')
-  return { role, participant: MOCK_PARTICIPANT }
+/** GET /me: validates a stored token and returns who it belongs to. */
+export function getMe(): Promise<{ role: Role; participant: Participant | null }> {
+  return api('/me')
 }
 
 // ---------------------------------------------------------------------------
 // Participant
 // ---------------------------------------------------------------------------
 
-/** GET /me/walks — newest first */
-export async function getWalkHistory(participantId: string): Promise<WalkRecord[]> {
-  await delay()
-  return newestFirst(walks.filter((w) => w.participantId === participantId))
+/** GET /me/walks: newest first. */
+export async function getWalkHistory(): Promise<WalkRecord[]> {
+  const res = await api<WalkHistoryResponse>('/me/walks?limit=200')
+  return res.walks
 }
 
-// /** POST /routes/generate */
-// export async function generateRoutes(duration: WalkDuration): Promise<RouteOption[]> {
-//   await delay(600) // pretend to compute
-//   return buildRouteOptions(duration)
-// }
-
-interface ServerRouteResponse {
-  baseline: {
-    duration_s: number
-    distance_m: number
-    polyline: string
-  }
+/** POST /routes/generate: real routes for the plan. A direct route first, then park detours that fit. */
+export async function generateRoutes(plan: WalkPlan): Promise<RouteOption[]> {
+  const res = await api<RoutesResponse>('/routes/generate', { method: 'POST', body: plan })
+  return res.routes
 }
 
-const routeRequestCache = new Map<string, Promise<RouteOption[]>>()
-
-/** Converts a text-based walk plan into a real server-generated route. */
-export async function generateRoutes(
-  plan: WalkPlan,
-): Promise<RouteOption[]> {
-  const cacheKey = JSON.stringify([
-    plan.startLocation.trim().toLowerCase(),
-    plan.endLocation.trim().toLowerCase(),
-    plan.duration,
-  ])
-
-  const cached = routeRequestCache.get(cacheKey)
-  if (cached) return cached
-
-  const request = (async () => {
-    const response = await fetch(
-      `${API_BASE_URL}/route/generate-from-text`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          start_location: plan.startLocation,
-          end_location: plan.endLocation,
-          total_travel_time: plan.duration * 60,
-        }),
-      },
-    )
-
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as
-        | { detail?: string }
-        | null
-
-      throw new Error(
-        body?.detail ?? `Server returned status ${response.status}`,
-      )
-    }
-
-    const data = (await response.json()) as ServerRouteResponse
-
-    // Produce coordinates for both the progress drawing and Leaflet map.
-    const { drawingPath, mapPath } = decodeRoutePath(
-      data.baseline.polyline,
-    )
-
-    return [
-      {
-        id: 'live-generated-route',
-        name: 'Generated walking route',
-        description: `${plan.startLocation} → ${plan.endLocation}`,
-        distanceKm: Number(
-          (data.baseline.distance_m / 1000).toFixed(2),
-        ),
-        estimatedMinutes: Math.ceil(
-          data.baseline.duration_s / 60,
-        ),
-        path: drawingPath,
-        mapPath,
-      },
-    ]
-  })()
-
-  // React development mode can load an effect twice.
-  // Caching prevents duplicate Google requests for the same plan.
-  routeRequestCache.set(cacheKey, request)
-
-  try {
-    return await request
-  } catch (error) {
-    routeRequestCache.delete(cacheKey)
-    throw error
-  }
+/** POST /me/walks/prepare: start generating this walk's script and audio. Poll with getPreparation. */
+export async function prepareWalk(plan: WalkPlan, route: RouteOption): Promise<WalkPreparation> {
+  const res = await api<PreparationResponse>('/me/walks/prepare', { method: 'POST', body: { plan, route } })
+  return res.preparation
 }
 
-/** GET /scripts */
-export async function getScript(durationMinutes: number): Promise<ScriptSegment[]> {
-  await delay(100)
-  return buildScript(durationMinutes)
+/** GET /me/walks/prepare/{id} */
+export async function getPreparation(id: string): Promise<WalkPreparation> {
+  const res = await api<PreparationResponse>(`/me/walks/prepare/${encodeURIComponent(id)}`)
+  return res.preparation
 }
 
-/** POST /me/walks */
-export async function saveWalk(record: WalkRecord): Promise<WalkRecord> {
-  await delay()
-  walks = [...walks.filter((w) => w.id !== record.id), record]
-  return record
+/** GET /me/walks/prepare/{id}/audio/{index}: one mp3 segment. */
+export function getSegmentAudio(preparationId: string, index: number): Promise<Blob> {
+  return apiBlob(`/me/walks/prepare/${encodeURIComponent(preparationId)}/audio/${index}`)
+}
+
+export interface SaveWalkInput {
+  clientId: string
+  date: string
+  plan: WalkPlan
+  route: RouteOption
+  preSurvey: SurveyResponse
+  postSurvey: SurveyResponse
+  actualMinutes: number
+  preparationId: string
+}
+
+/** POST /me/walks. `clientId` makes a retry safe; the server attaches the generated script. */
+export function saveWalk(input: SaveWalkInput): Promise<WalkRecord> {
+  return api<WalkRecord>('/me/walks', { method: 'POST', body: input })
 }
 
 // ---------------------------------------------------------------------------
-// Admin / researcher (spec §5). All of these require a non-participant role;
-// the mock does not enforce that because RequireAdmin guards the routes.
+// Admin / researcher
 // ---------------------------------------------------------------------------
 
 /** GET /admin/conditions */
 export async function getAdminConditions(): Promise<ConditionSetting[]> {
-  await delay()
-  return conditions.map((c) => ({ ...c }))
+  const res = await api<{ conditions: ConditionSetting[] }>('/admin/conditions')
+  return res.conditions
 }
 
-/** PUT /admin/conditions/{id}, applied to the whole list for the mock. */
+/** PUT /admin/conditions: replaces the whole list. */
 export async function saveAdminConditions(next: ConditionSetting[]): Promise<ConditionSetting[]> {
-  await delay()
-  const ids = new Set<string>()
-  for (const c of next) {
-    if (!c.id.trim() || !c.name.trim() || !c.voice.trim()) throw new Error('Every condition needs an id, name and voice.')
-    if (!Number.isFinite(c.age) || c.age <= 0) throw new Error(`Condition ${c.id}: age must be a positive number.`)
-    if (ids.has(c.id)) throw new Error(`Duplicate condition id "${c.id}".`)
-    ids.add(c.id)
-  }
-  conditions = next.map((c) => ({ ...c }))
-  return conditions.map((c) => ({ ...c }))
+  const res = await api<{ conditions: ConditionSetting[] }>('/admin/conditions', { method: 'PUT', body: { conditions: next } })
+  return res.conditions
 }
 
-/**
- * Placeholder for the backend's scoring. Maps a single survey item to its
- * scale label; the real rule lives in `GET /admin/stats`.
- */
-function scaleLabel(score: SurveyScore | undefined): string {
-  return SURVEY_SCALE.find((s) => s.value === score)?.label ?? '–'
-}
-
-function toAdminItem(p: Participant): AdminParticipantItem {
-  const own = newestFirst(walks.filter((w) => w.participantId === p.id))
-  const latest = own[0]
-  let status: ParticipantStatus = 'Not started'
-  if (latest) status = latest.completed ? 'Completed' : 'In progress'
-  return {
-    id: p.id,
-    condition: p.condition,
-    status,
-    walkCount: own.length,
-    lastWalkAt: latest?.date ?? null,
-    stressStart: scaleLabel(latest?.preSurvey.tense),
-    stressEnd: scaleLabel(latest?.postSurvey?.tense),
-  }
-}
-
-/** GET /admin/participants — most recently joined first */
+/** GET /admin/participants: most recently joined first. */
 export async function getAdminParticipants(): Promise<AdminParticipantItem[]> {
-  await delay()
-  return [...participants]
-    .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))
-    .map(toAdminItem)
+  const res = await api<{ participants: AdminParticipantItem[] }>('/admin/participants')
+  return res.participants
 }
 
-/** Next free id in the AAA### series (the backend will own this). */
-function nextParticipantId(): string {
-  const max = participants.reduce((acc, p) => {
-    const m = /^AAA(\d{3})$/.exec(p.id)
-    return m ? Math.max(acc, Number(m[1])) : acc
-  }, 0)
-  return `AAA${String(max + 1).padStart(3, '0')}`
+/** POST /admin/participants: the server assigns the id and returns the access code exactly once. */
+export function createAdminParticipant(conditionId: string): Promise<CreateParticipantResult> {
+  return api<CreateParticipantResult>('/admin/participants', { method: 'POST', body: { condition: conditionId } })
 }
 
-/** Single-use access code, e.g. "K7P2-QX9M". Unambiguous alphabet (no 0/O, 1/I). */
-function generateAccessCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  const bytes = new Uint8Array(8)
-  crypto.getRandomValues(bytes)
-  const chars = Array.from(bytes, (b) => alphabet[b % alphabet.length])
-  return `${chars.slice(0, 4).join('')}-${chars.slice(4).join('')}`
-}
-
-/**
- * POST /admin/participants — the server assigns the id and generates the
- * access code, which is returned exactly once.
- */
-export async function createAdminParticipant(conditionId: string): Promise<CreateParticipantResult> {
-  await delay()
-  if (!conditions.some((c) => c.id === conditionId)) {
-    throw new Error(`Unknown condition "${conditionId}".`)
-  }
-  const id = nextParticipantId()
-  const participant: Participant = {
-    id,
-    displayName: `Participant ${id}`,
-    condition: conditionId,
-    joinedAt: new Date().toISOString(),
-  }
-  participants = [...participants, participant]
-  return { participant: toAdminItem(participant), accessCode: generateAccessCode() }
-}
-
-/**
- * Walks across all participants, newest first, each tagged with the
- * participant's condition. Feeds the CSV export until `GET /admin/export.csv`
- * exists (the backend will copy `condition` onto the walk at save time).
- */
-export async function getAdminWalks(): Promise<Array<WalkRecord & { condition: string }>> {
-  await delay()
-  const conditionOf = new Map(participants.map((p) => [p.id, p.condition]))
-  return newestFirst(walks).map((w) => ({ ...w, condition: conditionOf.get(w.participantId) ?? '' }))
+/** GET /admin/export.csv: one row per walk, built by the server. */
+export function getAdminExportCsv(): Promise<Blob> {
+  return apiBlob('/admin/export.csv')
 }
