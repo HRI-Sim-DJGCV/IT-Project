@@ -1,0 +1,13 @@
+# Applies to every build whose context is the repo root (api and web). Keeps
+# the context small: dependencies and outputs are rebuilt inside the image.
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.env
+**/.env.*
+!**/.env.example
+**/data
+.git
+.claude
+docs
