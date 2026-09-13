@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getScript } from '../../api'
-import { MapPlaceholder } from '../../components/MapPlaceholder'
-import { Button, Card, Screen } from '../../components/ui'
+import { getCachedAudio, loadPreparationAudio } from '../../api/audioCache'
+import { RouteMap } from '../../components/RouteMap'
+import { Button, Card, ErrorText, Screen } from '../../components/ui'
 import { useSession } from '../../context/SessionContext'
-import { useSpeech } from '../../hooks/useSpeech'
-import type { ScriptSegment } from '../../types'
+import { useScriptAudio } from '../../hooks/useScriptAudio'
 
 function fmt(sec: number) {
   const m = Math.floor(sec / 60)
@@ -16,22 +15,40 @@ function fmt(sec: number) {
 export function Progress() {
   const navigate = useNavigate()
   const { draft, updateDraft } = useSession()
-  const speech = useSpeech()
+  const script = draft?.script
+  const segments = useMemo(() => script?.segments ?? [], [script])
+  const preparationId = draft?.preparationId
+
+  const [urls, setUrls] = useState<Map<number, string> | null>(() => (preparationId ? getCachedAudio(preparationId) : null))
+  const [audioError, setAudioError] = useState<string | null>(null)
+  const audio = useScriptAudio(urls)
 
   const totalSec = (draft?.plan?.duration ?? 15) * 60
-  const [script, setScript] = useState<ScriptSegment[]>([])
   const [elapsed, setElapsed] = useState(0)
   const [phase, setPhase] = useState<'ready' | 'running' | 'paused'>('ready')
-  const [current, setCurrent] = useState<ScriptSegment | null>(null)
-  const spokenRef = useRef<Set<number>>(new Set())
+  const firedRef = useRef<Set<number>>(new Set())
 
+  // Guard: the walk needs a route and a generated script.
   useEffect(() => {
-    if (!draft?.route) {
-      navigate('/walk/select', { replace: true })
-      return
+    if (!draft?.route) navigate('/walk/select', { replace: true })
+    else if (!draft.script || !preparationId) navigate('/walk/prepare', { replace: true })
+  }, [draft, preparationId, navigate])
+
+  // After a reload the in-memory audio is gone: fetch it again before allowing the walk to begin.
+  useEffect(() => {
+    if (urls || !preparationId || segments.length === 0) return
+    let cancelled = false
+    loadPreparationAudio(preparationId, segments)
+      .then((u) => {
+        if (!cancelled) setUrls(u)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setAudioError(e instanceof Error ? e.message : 'Could not load the audio.')
+      })
+    return () => {
+      cancelled = true
     }
-    getScript(draft.plan?.duration ?? 15).then(setScript)
-  }, [draft, navigate])
+  }, [urls, preparationId, segments])
 
   // Ticker
   useEffect(() => {
@@ -40,61 +57,59 @@ export function Progress() {
     return () => clearInterval(id)
   }, [phase])
 
-  // Fire script segments as their time arrives
+  // Queue script segments as their time arrives
   useEffect(() => {
     if (phase !== 'running') return
-    const due = script.filter((s) => s.atSecond <= elapsed && !spokenRef.current.has(s.atSecond))
+    const due = segments.filter((s) => s.atSecond <= elapsed && !firedRef.current.has(s.atSecond))
     if (due.length) {
-      const seg = due[due.length - 1]
-      due.forEach((s) => spokenRef.current.add(s.atSecond))
-      setCurrent(seg)
-      speech.speak(seg.text)
+      due.forEach((s) => firedRef.current.add(s.atSecond))
+      audio.enqueue(due)
     }
     if (elapsed >= totalSec) finish()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elapsed, phase, script])
+  }, [elapsed, phase, segments])
 
   function start() {
-    speech.unlock()
+    // The first segments are due at 0: play them inside this click so mobile browsers allow audio.
+    const first = segments.filter((s) => s.atSecond <= 0)
+    first.forEach((s) => firedRef.current.add(s.atSecond))
+    audio.start(first)
     setPhase('running')
   }
 
   function togglePause() {
     if (phase === 'running') {
-      speech.stop()
+      audio.pause()
       setPhase('paused')
     } else {
+      audio.resume()
       setPhase('running')
     }
   }
 
   function finish() {
-    speech.stop()
+    audio.stop()
     updateDraft({ actualMinutes: Math.max(1, Math.round(elapsed / 60)) })
     navigate('/walk/post-survey', { replace: true })
   }
 
   const remaining = Math.max(0, totalSec - elapsed)
   const progress = Math.min(elapsed / totalSec, 1)
+  const canStart = urls !== null && !audioError
 
   return (
     <Screen
       title={phase === 'ready' ? 'Ready to begin' : 'Meditation in progress'}
       right={
-        speech.supported ? (
-          <button
-            type="button"
-            onClick={() => speech.setMuted(!speech.muted)}
-            aria-label={speech.muted ? 'Unmute' : 'Mute'}
-            className="text-sm text-muted"
-          >
-            {speech.muted ? 'Unmute' : 'Mute'}
-          </button>
-        ) : null
+        <button type="button" onClick={() => audio.setMuted(!audio.muted)} aria-label={audio.muted ? 'Unmute' : 'Mute'} className="text-sm text-muted">
+          {audio.muted ? 'Unmute' : 'Mute'}
+        </button>
       }
       footer={
         phase === 'ready' ? (
-          <Button onClick={start}>Begin walk</Button>
+          <Button onClick={start} disabled={!canStart}>
+            {canStart ? 'Begin walk' : audioError ? 'Audio unavailable' : 'Loading audio…'}
+          </Button>
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <Button variant="secondary" onClick={togglePause}>
@@ -105,7 +120,7 @@ export function Progress() {
         )
       }
     >
-      <MapPlaceholder route={draft?.route} progress={phase === 'ready' ? 0 : progress} className="h-56" />
+      <RouteMap route={draft?.route} progress={phase === 'ready' ? 0 : progress} className="h-56" />
 
       <div className="text-center">
         <p className="text-4xl font-semibold tabular-nums">{fmt(remaining)}</p>
@@ -116,17 +131,24 @@ export function Progress() {
       </div>
 
       <Card className="min-h-28">
-        {phase === 'ready' ? (
+        {audioError ? (
+          <>
+            <ErrorText>{audioError}</ErrorText>
+            <Button variant="secondary" className="mt-3" onClick={() => navigate('/walk/prepare', { replace: true })}>
+              Prepare again
+            </Button>
+          </>
+        ) : phase === 'ready' ? (
           <p className="text-sm text-muted">
-            Put in your headphones or turn up your volume. The guide will speak to you as you walk. Tap <b>Begin walk</b> when you're ready.
-            {!speech.supported ? ' (Speech is not supported on this browser — the script will be shown as text.)' : ''}
+            Put in your headphones or turn up your volume. Your guide will speak to you as you walk. Tap <b>Begin walk</b>{' '}
+            when you're ready.
           </p>
-        ) : current ? (
+        ) : audio.current ? (
           <>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-              {phase === 'paused' ? 'Paused' : speech.speaking ? 'Now speaking' : 'Now'} · {current.title}
+              {phase === 'paused' ? 'Paused' : audio.speaking ? 'Now speaking' : 'Now'} · {audio.current.title}
             </p>
-            <p className="text-[15px] leading-relaxed">{current.text}</p>
+            <p className="text-[15px] leading-relaxed">{audio.current.text}</p>
           </>
         ) : (
           <p className="text-sm text-muted">Starting…</p>

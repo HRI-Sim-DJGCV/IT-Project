@@ -1,4 +1,4 @@
-import { SURVEY_ITEMS, SURVEY_SCALE } from '../mock/data'
+import { SURVEY_ITEMS, SURVEY_SCALE } from '@shared/survey'
 import type { SurveyResponse, SurveyScore } from '../types'
 import { Card } from './ui'
 

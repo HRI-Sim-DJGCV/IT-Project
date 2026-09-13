@@ -1,42 +1,43 @@
 import { useEffect, useState } from 'react'
+import { ROUTE_TYPE_LABELS } from '@shared/survey'
 import { getWalkHistory } from '../api'
-import { Card, Screen } from '../components/ui'
-import { useSession } from '../context/SessionContext'
-import { ROUTE_TYPES, SURVEY_ITEMS } from '../mock/data'
-import type { SurveyResponse, WalkRecord } from '../types'
-
-function calmScore(s: SurveyResponse | null): number | null {
-  if (!s) return null
-  // Higher = calmer. Reverse-score the negative items.
-  const positive = ['calm', 'at_ease']
-  const total = SURVEY_ITEMS.reduce((acc, item) => {
-    const v = s[item.key] ?? 0
-    return acc + (positive.includes(item.key) ? v : 5 - v)
-  }, 0)
-  return total
-}
+import { Card, ErrorText, Screen } from '../components/ui'
+import type { WalkRecord } from '../types'
 
 export function History() {
-  const { participant } = useSession()
   const [walks, setWalks] = useState<WalkRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (participant) getWalkHistory(participant.id).then(setWalks)
-  }, [participant])
+    let cancelled = false
+    getWalkHistory()
+      .then((w) => {
+        if (!cancelled) setWalks(w)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load your history.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <Screen title="Activity history" back="/home">
-      {walks === null ? (
+      {error ? (
+        <ErrorText>{error}</ErrorText>
+      ) : walks === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : walks.length === 0 ? (
         <p className="text-sm text-muted">No walks yet. Your completed walks will appear here.</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {walks.map((w) => {
-            const pre = calmScore(w.preSurvey)
-            const post = calmScore(w.postSurvey)
-            const delta = pre !== null && post !== null ? post - pre : null
-            const type = ROUTE_TYPES.find((t) => t.value === w.plan.routeType)?.label
+            // Scores are computed by the server from the raw answers; the app only displays them.
+            const pre = w.scores?.pre.calm ?? null
+            const post = w.scores?.post?.calm ?? null
+            const delta = w.scores?.delta?.calm ?? null
+            const type = ROUTE_TYPE_LABELS[w.plan.routeType]
             return (
               <li key={w.id}>
                 <Card>
@@ -51,6 +52,7 @@ export function History() {
                       </p>
                       <p className="text-sm text-muted">
                         {w.route.distanceKm} km · {w.actualMinutes} min · {type}
+                        {w.route.park ? ` · via ${w.route.park.name}` : ''}
                       </p>
                     </div>
                     {delta !== null ? (

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAdminWalks } from '../../api'
+import { getAdminExportCsv } from '../../api'
+import { downloadBlob } from '../../api/download'
 import { Button, ErrorText } from '../../components/ui'
 import { AdminAddParticipantModal } from './AdminAddParticipantModal'
 import { AdminLayout } from './AdminLayout'
 import { AdminParticipantList } from './AdminParticipantList'
-import { downloadCsv, walksToCsv } from './exportCsv'
 import { useAdminData } from './useAdminData'
 
 const RECENT_COUNT = 3
@@ -21,9 +21,9 @@ export function AdminDashboard() {
     setExporting(true)
     setExportError(null)
     try {
-      const walks = await getAdminWalks()
+      const blob = await getAdminExportCsv()
       const stamp = new Date().toISOString().slice(0, 10)
-      downloadCsv(`walking_meditation_walks_${stamp}.csv`, walksToCsv(walks))
+      downloadBlob(`walking_meditation_walks_${stamp}.csv`, blob)
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Export failed.')
     } finally {
@@ -43,9 +43,7 @@ export function AdminDashboard() {
               <div key={c.id} className="rounded-xl border border-line bg-card p-3">
                 <p className="font-bold text-ink">{c.name}</p>
                 <p className="mt-1 text-xs text-muted">Voice: {c.voice}</p>
-                <p className="text-xs text-muted">
-                  Participants: {participants.filter((p) => p.condition === c.id).length}
-                </p>
+                <p className="text-xs text-muted">Participants: {participants.filter((p) => p.condition === c.id).length}</p>
               </div>
             ))}
           </div>
@@ -61,11 +59,7 @@ export function AdminDashboard() {
             </button>
           ) : null}
         </div>
-        <AdminParticipantList
-          participants={participants.slice(0, RECENT_COUNT)}
-          loading={loading}
-          error={error}
-        />
+        <AdminParticipantList participants={participants.slice(0, RECENT_COUNT)} loading={loading} error={error} />
       </section>
 
       <div className="mt-auto flex flex-col gap-2.5 pt-4">
@@ -79,11 +73,7 @@ export function AdminDashboard() {
       </div>
 
       {showAddModal ? (
-        <AdminAddParticipantModal
-          conditions={conditions}
-          onClose={() => setShowAddModal(false)}
-          onAdded={addParticipant}
-        />
+        <AdminAddParticipantModal conditions={conditions} onClose={() => setShowAddModal(false)} onAdded={addParticipant} />
       ) : null}
     </AdminLayout>
   )

@@ -1,20 +1,19 @@
 /**
  * Development seed. Idempotent (upserts), touches ONLY the `accounts`,
  * `conditions` and `walkRecords` collections, and refuses to run in
- * production. Mirrors the frontend's mock data so the demo logins keep working.
+ * production.
  *
  *   npm run seed
  */
 import bcrypt from 'bcryptjs'
 import { SURVEY_VERSION } from '../../../shared/survey'
-import type { Role } from '../../../shared/types'
+import type { GeneratedScript, Role, RouteOption } from '../../../shared/types'
 import { config } from '../config'
 import { connectDb, disconnectDb, syncIndexes } from '../db'
 import { Account } from '../models/Account'
 import { Condition } from '../models/Condition'
 import { WalkRecord } from '../models/WalkRecord'
-import { buildRouteOptions } from '../services/routeTemplates'
-import { DEFAULT_SCRIPT } from '../services/scriptTemplate'
+import { buildSegments } from '../services/scriptSegments'
 
 interface SeedAccount {
   _id: string
@@ -23,6 +22,53 @@ interface SeedAccount {
   displayName: string
   condition?: string
   joinedAt: Date
+}
+
+/** A short loop near the University of Melbourne, so the seeded history draws on the map. */
+const SAMPLE_ROUTE: RouteOption = {
+  id: 'seed-direct',
+  name: 'Direct walk',
+  description: 'University of Melbourne → University of Melbourne',
+  distanceKm: 1.2,
+  estimatedMinutes: 15,
+  path: [
+    [8, 92],
+    [30, 60],
+    [55, 70],
+    [75, 35],
+    [92, 8],
+  ],
+  mapPath: [
+    [-37.7963, 144.9614],
+    [-37.7975, 144.9632],
+    [-37.7988, 144.9621],
+    [-37.7981, 144.9598],
+    [-37.7963, 144.9614],
+  ],
+  origin: { lat: -37.7963, lon: 144.9614 },
+  destination: { lat: -37.7963, lon: 144.9614 },
+  park: null,
+}
+
+const SAMPLE_RAW = `[FOCUSED_ATTENTION]
+Begin walking at an easy pace. Feel your feet meet the ground, heel to toe. (pause) Notice the air on your face and the rhythm of your steps.
+
+[COMPASSION MEDITATION]
+As you walk, bring to mind someone who is kind to you. Silently wish them well. (pause) Now offer that same kindness to yourself.
+
+[CLOSING MEDITATION]
+You are nearing the end of this walk. Take one slow breath in, and let it go. Carry this steadiness with you.`
+
+function sampleScript(durationMinutes: number): GeneratedScript {
+  return {
+    generator: 'ai',
+    model: 'seed-sample',
+    promptVersion: 0,
+    context: 'Seed data: sample walk for the demo history.',
+    voice: { speaker: 'Ryan', instruct: 'seed' },
+    segments: buildSegments(SAMPLE_RAW, durationMinutes).map((s) => ({ ...s, audioIndex: null })),
+    rawText: SAMPLE_RAW,
+  }
 }
 
 async function main() {
@@ -40,10 +86,7 @@ async function main() {
   ]) {
     await Condition.updateOne(
       { _id: c._id },
-      {
-        $set: { name: c.name, voice: c.voice, age: c.age, updatedAt: now, updatedBy: 'seed' },
-        $setOnInsert: { scriptVersion: 1, script: DEFAULT_SCRIPT, scriptHistory: [] },
-      },
+      { $set: { name: c.name, voice: c.voice, age: c.age, updatedAt: now, updatedBy: 'seed' } },
       { upsert: true },
     )
   }
@@ -70,20 +113,22 @@ async function main() {
     {
       clientId: 'seed-w1',
       date: new Date('2026-08-30T08:15:00Z'),
-      plan: { startLocation: 'Home', endLocation: 'Home', duration: 15, routeType: 'loop' },
-      route: buildRouteOptions(15)[0],
+      plan: { startLocation: 'University of Melbourne', endLocation: 'University of Melbourne', duration: 15, routeType: 'loop' },
+      route: SAMPLE_ROUTE,
       preSurvey: { calm: 2, tense: 3, at_ease: 2, worried: 3 },
       postSurvey: { calm: 3, tense: 2, at_ease: 3, worried: 2 },
       actualMinutes: 16,
+      script: sampleScript(15),
     },
     {
       clientId: 'seed-w2',
       date: new Date('2026-09-02T17:40:00Z'),
-      plan: { startLocation: 'Home', endLocation: 'Home', duration: 30, routeType: 'green_space' },
-      route: buildRouteOptions(30)[1],
+      plan: { startLocation: 'University of Melbourne', endLocation: 'University of Melbourne', duration: 30, routeType: 'green_space' },
+      route: { ...SAMPLE_ROUTE, estimatedMinutes: 30, distanceKm: 2.4 },
       preSurvey: { calm: 1, tense: 4, at_ease: 2, worried: 4 },
       postSurvey: { calm: 3, tense: 2, at_ease: 3, worried: 2 },
       actualMinutes: 31,
+      script: sampleScript(30),
     },
   ]
   for (const participantId of ['demo', 'AAA001']) {
@@ -95,7 +140,7 @@ async function main() {
             ...w,
             participantId,
             condition: 'A',
-            scriptVersion: 1,
+            preparationId: null,
             surveyVersion: SURVEY_VERSION,
             completed: true,
             createdAt: now,

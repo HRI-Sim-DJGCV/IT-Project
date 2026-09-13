@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import path from 'node:path'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -9,6 +10,14 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(8000),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   NODE_ENV: z.string().default('development'),
+  /** The internal Python AI service (routes, script generation, text-to-speech). Never exposed to the app. */
+  AI_SERVICE_URL: z.string().url().default('http://localhost:8001'),
+  /** Optional shared secret sent as X-Internal-Key; set the same value in server/.env */
+  AI_INTERNAL_KEY: z.string().optional(),
+  /** Script generation + audio can take minutes on CPU. Per-call timeout. */
+  AI_TIMEOUT_MS: z.coerce.number().int().positive().default(15 * 60_000),
+  /** Where generated mp3 files are written. One folder per walk preparation. */
+  AUDIO_DIR: z.string().default('./data/audio'),
 })
 
 const parsed = schema.safeParse(process.env)
@@ -23,4 +32,5 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
   isProduction: parsed.data.NODE_ENV === 'production',
+  audioDir: path.resolve(parsed.data.AUDIO_DIR),
 }
