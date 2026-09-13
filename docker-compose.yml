@@ -1,46 +1,100 @@
-# One deployable unit: the Node API (the only thing the app talks to) and the
-# internal Python AI service behind it. `mongo` is an optional local database
-# for development; point MONGODB_URI at Atlas instead for the real deployment.
+# One command to run the whole app locally for testing:
 #
-#   docker compose up --build            # api + ai + local mongo
-#   docker compose up --build api ai     # api + ai against Atlas (MONGODB_URI in backend/.env)
+#   docker compose up --build
+#
+# Starts a local MongoDB, seeds it with the demo logins, the Node API, the web
+# app, and a STUB AI service (canned route, script and silent audio) so nobody
+# needs Google/OpenAI keys or the 1.2 GB voice model to click through every
+# screen. Open http://localhost:5173 (or /phone.html) when the logs settle.
+#
+# Real AI (needs server/.env with keys):
+#   docker compose -f docker-compose.yml -f docker-compose.real.yml --profile real up --build
+#
+# Stop:            docker compose down
+# Wipe database:   docker compose down -v
 
 services:
-  api:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    env_file: backend/.env
-    environment:
-      AI_SERVICE_URL: http://ai:8001
-      AUDIO_DIR: /repo/backend/data/audio
-    ports:
-      - "8000:8000"
-    volumes:
-      - audio:/repo/backend/data/audio
-    depends_on:
-      - ai
-
-  ai:
-    build: ./server
-    env_file: server/.env
-    environment:
-      PORT: "8001"
-    # Not published: only the api container can reach it.
-    expose:
-      - "8001"
-    volumes:
-      # Hugging Face model cache so the TTS model is downloaded once.
-      - hf-cache:/root/.cache/huggingface
-
   mongo:
     image: mongo:7
     ports:
       - "27017:27017"
     volumes:
       - mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: creates conditions A/B and the demo logins (idempotent), then exits.
+  seed:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["node", "dist/backend/src/scripts/seed.js"]
+    environment:
+      NODE_ENV: development
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: walkingapp
+      JWT_SECRET: local-docker-dev-only-secret-not-for-production-0123456789
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: development
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: walkingapp
+      JWT_SECRET: local-docker-dev-only-secret-not-for-production-0123456789
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      AI_SERVICE_URL: http://ai-stub:8001
+      AUDIO_DIR: /repo/backend/data/audio
+    ports:
+      - "8000:8000"
+    volumes:
+      - audio:/repo/backend/data/audio
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      ai-stub:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8000/v1
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+  # Stand-in for the Python AI service. Same endpoints, canned answers, silent audio.
+  ai-stub:
+    image: node:22-alpine
+    working_dir: /app
+    command: ["node", "stub.mjs"]
+    volumes:
+      - ./tools/ai-stub:/app:ro
+
+  # The real Python AI service. Only started with docker-compose.real.yml + --profile real.
+  ai:
+    profiles: ["real"]
+    build: ./server
+    env_file: server/.env
+    environment:
+      PORT: "8001"
+    expose:
+      - "8001"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
 
 volumes:
+  mongo:
   audio:
   hf-cache:
-  mongo:

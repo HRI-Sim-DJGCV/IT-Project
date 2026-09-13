@@ -2,6 +2,44 @@
 
 A guided walking-meditation app for a stress regulation trial. Participants check in, plan a walk, get a real route, and follow a meditation that is **written by AI for that exact walk** and read aloud in a server-generated voice. They check in again at the end. Researchers view and export the collected records.
 
+## Quick start (one command, no keys needed)
+
+Requires only [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+```bash
+docker compose up --build
+```
+
+Wait for `api ... listening on http://localhost:8000/v1` in the logs (the first build takes a few minutes), then open:
+
+| URL | What you get |
+|---|---|
+| <http://localhost:5173> | The app, as on a phone (use DevTools device emulation) |
+| <http://localhost:5173/phone.html> | The app inside an iPhone frame, for demos on a laptop |
+
+| Role | User ID | Password | Lands on |
+|---|---|---|---|
+| Participant | `demo` | `demo` | Home → walk flow |
+| Research admin | `admin` | `admin` | Admin dashboard |
+| Medical professional | `doctor` | `doctor` | Admin dashboard |
+
+This starts a local MongoDB (seeded with the logins above), the API, the web app, and a **stub AI service** that returns a canned route, a fixed script and silent audio. Every screen works, including the full walk flow; you just won't hear a voice or see your real address on the map. Walks saved this way are marked `stub-model` in the database.
+
+```bash
+docker compose down        # stop
+docker compose down -v     # stop and wipe the local database and audio
+```
+
+### Real routes, scripts and voice
+
+Copy `server/.env.example` to `server/.env`, fill in `GOOGLE_MAPS_API_KEY` and `OPENAI_API_KEY`, then:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.real.yml --profile real up --build
+```
+
+The first start downloads the ~1.2 GB voice model. On a CPU, generating a walk's script and audio takes a few minutes; a GPU makes it seconds.
+
 ## Architecture
 
 ```
@@ -17,23 +55,49 @@ A guided walking-meditation app for a stress regulation trial. Participants chec
 
 - The **app talks only to the Node API**. It never sees the Google or OpenAI keys and never calls the Python service.
 - The **Node API** owns identity (JWT), participants, conditions, walk records, the researcher dashboard and CSV export. When a participant confirms a route it asks the AI service for a script and then for one audio clip per script segment, stores them, and streams the audio to the app.
-- The **Python AI service** is a private helper with three capabilities: real walking routes (with park detours), an AI-written meditation script for one walk, and text-to-speech. It is not published outside the Compose network / host.
+- The **Python AI service** is a private helper with three capabilities: real walking routes (with park detours), an AI-written meditation script for one walk, and text-to-speech. It is never published outside the Compose network / host.
 - **Conditions** select the voice (and its apparent age) that reads the script. There is deliberately no fixed script anywhere: every walk gets a new one, and the exact text is stored on the walk record for the research analysis.
 
 | Folder | What |
 |---|---|
 | `frontend/` | React + TypeScript mobile web app (Vite, Tailwind, React Router, Leaflet) |
-| `backend/` | Node + TypeScript API (Express, Mongoose, Zod, JWT) over MongoDB Atlas, port 8000 |
+| `backend/` | Node + TypeScript API (Express, Mongoose, Zod, JWT), port 8000 |
 | `server/` | Python FastAPI AI service (Google Maps Platform, OpenAI, Qwen3-TTS), port 8001, internal |
 | `shared/` | Domain types, survey items and the calm-score rule, imported by both frontend and backend |
+| `tools/ai-stub/` | Stand-in for `server/` used by the quick start |
 | `docs/` | [backend-api-spec.md](docs/backend-api-spec.md), [frontend-domain-model.md](docs/frontend-domain-model.md) |
-| `docker-compose.yml` | Runs api + ai (+ an optional local Mongo) as one unit |
+| `docker-compose.yml` | Quick start: mongo + seed + api + web + ai-stub. `docker-compose.real.yml` swaps in the real AI service |
 
-## Running everything locally
+## Running the pieces by hand (for development)
 
-Requires Node.js 20+, Python 3.11+ with ffmpeg on PATH (for the AI service), and either Docker (local Mongo) or access to the team's Atlas cluster.
+Use this when you are changing code and want hot reload, or when you want the API on the team's Atlas cluster instead of the local Mongo.
 
-### 1. AI service (`server/`)
+### API (`backend/`)
+
+```bash
+cd backend
+cp .env.example .env     # MONGODB_URI (Atlas, or mongodb://localhost:27017 after `docker compose up mongo`), JWT_SECRET
+npm install
+npm run seed             # only for a fresh local database; Atlas already has the demo logins
+npm run dev              # http://localhost:8000/v1, reloads on save
+```
+
+`GET /v1/health` reports the database connection. On start the API logs whether the AI service is reachable.
+
+### App (`frontend/`)
+
+```bash
+cd frontend
+cp .env.example .env     # VITE_API_BASE_URL=http://localhost:8000/v1
+npm install
+npm run dev              # http://localhost:5173, hot reload
+```
+
+### AI service, stub or real
+
+Stub (no keys): `node tools/ai-stub/stub.mjs` on port 8001.
+
+Real (`server/`), needs Python 3.11+ and ffmpeg on PATH:
 
 ```bash
 cd server
@@ -43,52 +107,7 @@ cp .env.example .env                                   # GOOGLE_MAPS_API_KEY, OP
 uvicorn main:app --port 8001 --reload
 ```
 
-The first start downloads the ~1.2 GB TTS model. Set `TTS_ENABLED=false` in `server/.env` to skip it while working on routes or scripts (audio generation then fails with 503 and the app shows an error at the Prepare step). `GET /health` reports `tts: ready | loading | disabled | unavailable`.
-
-### 2. API (`backend/`)
-
-```bash
-cd backend
-cp .env.example .env     # MONGODB_URI (Atlas, or mongodb://localhost:27017 with `docker compose up mongo`), JWT_SECRET
-npm install
-npm run seed             # idempotent: conditions A/B and the dev logins below
-npm run dev              # http://localhost:8000/v1
-```
-
-`GET /v1/health` reports the database connection. On start the API logs whether the AI service is reachable.
-
-### 3. App (`frontend/`)
-
-```bash
-cd frontend
-cp .env.example .env     # VITE_API_BASE_URL=http://localhost:8000/v1
-npm install
-npm run dev
-```
-
-| URL | What you get |
-|---|---|
-| <http://localhost:5173> | The app on its own, as on a phone (use DevTools device emulation) |
-| <http://localhost:5173/phone.html> | The app inside an iPhone-sized frame, with a toggle to a desktop window, for demos |
-
-Dev logins created by `npm run seed` (only shown in dev builds):
-
-| Role | User ID | Password | Lands on |
-|---|---|---|---|
-| Participant | `demo` | `demo` | Home → walk flow |
-| Research admin | `admin` | `admin` | Admin dashboard (`/admin`) |
-| Medical professional | `doctor` | `doctor` | Admin dashboard (`/admin`) |
-
-A new participant is created from the admin dashboard, which shows a single-use access code once. The participant uses **Access with code** on the landing screen to set their password.
-
-### Or with Docker Compose
-
-```bash
-docker compose up --build            # api + ai + local mongo (point backend/.env at mongodb://mongo:27017)
-docker compose up --build api ai     # api + ai against Atlas
-```
-
-Only the API port (8000) is published; the AI service is reachable solely from the api container. Generated audio and the TTS model cache persist in named volumes.
+Set `TTS_ENABLED=false` in `server/.env` to skip the voice model while working on routes or scripts (audio then fails with 503 and the app shows an error at the Prepare step). `GET /health` reports `tts: ready | loading | disabled | unavailable`.
 
 ## The walk flow
 
@@ -98,16 +117,14 @@ Only the API port (8000) is published; the AI service is reachable solely from t
 4. **Walk**: segments play at their scheduled second, queued so they never overlap.
 5. **Post-survey** → `POST /me/walks` stores the walk with the exact script that was read.
 
-Script generation plus audio takes a few minutes on CPU (much faster on a GPU). The Prepare screen keeps the participant informed and offers a retry if anything fails.
-
 ## Deploying
 
 - **Frontend**: Vercel, Root Directory `frontend`, env `VITE_API_BASE_URL=https://<api-host>/v1`. `frontend/vercel.json` handles SPA routes.
-- **API + AI service**: one host running `docker compose up api ai` (a VM with a GPU makes audio generation fast; the existing AWS EC2 notes are in `server/READList/`). Set `AI_INTERNAL_KEY` in `backend/.env` and the same value as `INTERNAL_KEY` in `server/.env` so nothing but the API can call the AI service. Put the API behind nginx/TLS and allow the Vercel origin in `CORS_ORIGINS`.
+- **API + AI service**: one host running the real overlay above, with `MONGODB_URI` pointed at Atlas (a VM with a GPU makes audio generation fast; the existing AWS EC2 notes are in `server/READList/`). Set `AI_INTERNAL_KEY` in `backend/.env` and the same value as `INTERNAL_KEY` in `server/.env` so nothing but the API can call the AI service. Put the API behind nginx/TLS and allow the Vercel origin in `CORS_ORIGINS`.
 
 ## Secrets
 
-Never commit `.env` files (all three folders ignore them; commit the `.env.example` files instead). A Google Maps key was committed on an earlier branch and must be treated as leaked: rotate it in Google Cloud Console.
+Never commit `.env` files (all three folders ignore them; commit the `.env.example` files instead). A Google Maps key was committed on an earlier branch and must be treated as leaked: rotate it in Google Cloud Console. The quick-start Compose file uses a fixed dev JWT secret on purpose; it is not for production.
 
 ## Notes
 
