@@ -46,12 +46,20 @@ function RequireAdmin() {
   return <Outlet />
 }
 
+function RootRoute() {
+  const { role, participant, restoring } = useSession()
+  if (restoring) return <Restoring />
+  if (role === 'participant' && participant) return <Navigate to="/home" replace />
+  if (role && role !== 'participant') return <Navigate to="/admin" replace />
+  return <Landing />
+}
+
 export default function App() {
   return (
     <SessionProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<RootRoute />} />
           <Route path="/login" element={<Login />} />
           <Route path="/request-access" element={<RequestAccessStub />} />
           <Route path="/access-code" element={<AccessCode />} />
