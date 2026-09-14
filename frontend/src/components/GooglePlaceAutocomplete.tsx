@@ -34,12 +34,19 @@ function loadGoogleMaps(): Promise<void> {
   }
 
   googleMapsPromise = new Promise((resolve, reject) => {
+    // With loading=async the script's own onload fires before the API is
+    // initialised, so readiness must come from the callback parameter.
+    const callbackName = '__googleMapsReady'
+    const global = window as unknown as Record<string, unknown>
+    global[callbackName] = () => {
+      delete global[callbackName]
+      resolve()
+    }
     const script = document.createElement('script')
     script.src =
       `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}` +
-      '&libraries=places&v=weekly&loading=async'
+      `&libraries=places&v=weekly&loading=async&callback=${callbackName}`
     script.async = true
-    script.onload = () => resolve()
     script.onerror = () => reject(new Error('Google Maps could not be loaded.'))
     document.head.appendChild(script)
   })
