@@ -20,9 +20,15 @@ export const surveySchema = z
   .refine((s) => surveyKeys.every((k) => k in s), { message: `must contain ${surveyKeys.join(', ')}` })
   .refine((s) => Object.keys(s).every((k) => surveyKeys.includes(k)), { message: 'contains unknown survey items' })
 
+const coordinatesSchema = z.object({
+  lat: z.number().finite().min(-90).max(90),
+  lon: z.number().finite().min(-180).max(180),
+})
 export const planSchema = z.object({
   startLocation: z.string().trim().min(1).max(200),
   endLocation: z.string().trim().min(1).max(200),
+  startCoordinates: coordinatesSchema.optional(),
+  endCoordinates: coordinatesSchema.optional(),
   duration: durationSchema,
   routeType: routeTypeSchema,
 })
@@ -72,13 +78,8 @@ export const walkHistoryQuerySchema = z.object({
   before: z.string().datetime({ offset: true }).optional(),
 })
 
-/** POST /routes/generate. Only `duration` is required until routing is real. */
-export const generateRoutesSchema = z.object({
-  duration: durationSchema,
-  startLocation: z.string().trim().max(200).optional(),
-  endLocation: z.string().trim().max(200).optional(),
-  routeType: routeTypeSchema.optional(),
-})
+
+export const generateRoutesSchema = planSchema
 
 export const scriptQuerySchema = z.object({ duration: durationSchema })
 

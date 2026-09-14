@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+
+import { GooglePlaceAutocomplete } from '../../components/GooglePlaceAutocomplete'
 import { RouteMap } from '../../components/RouteMap'
-import { Button, Chips, Field, Screen, TextInput } from '../../components/ui'
+import { Button, Chips, Field, Screen } from '../../components/ui'
 import { useSession } from '../../context/SessionContext'
 import { useCurrentLocation } from '../../hooks/useCurrentLocation'
 import { DURATIONS, ROUTE_TYPES } from '../../mock/data'
 import type { RouteType, WalkDuration } from '../../types'
 
 type StartMode = 'address' | 'current'
+type Coordinates = { lat: number; lon: number }
 
 export function Plan() {
   const navigate = useNavigate()
@@ -16,7 +19,13 @@ export function Plan() {
 
   const [startMode, setStartMode] = useState<StartMode>('address')
   const [start, setStart] = useState(draft?.plan?.startLocation ?? '')
+  const [startCoordinates, setStartCoordinates] = useState<
+    Coordinates | undefined
+  >(draft?.plan?.startCoordinates)
   const [end, setEnd] = useState(draft?.plan?.endLocation ?? '')
+  const [endCoordinates, setEndCoordinates] = useState<
+    Coordinates | undefined
+  >(draft?.plan?.endCoordinates)
   const [sameAsStart, setSameAsStart] = useState(
     !draft?.plan || draft.plan.endLocation === draft.plan.startLocation,
   )
@@ -27,16 +36,29 @@ export function Plan() {
     draft?.plan?.routeType ?? null,
   )
 
+  const currentCoordinates: Coordinates = {
+    lat: currentLocation[0],
+    lon: currentLocation[1],
+  }
+  const selectedStartCoordinates =
+    startMode === 'current' ? currentCoordinates : startCoordinates
   const startLocation =
     startMode === 'current' ? 'Current location' : start.trim()
   const endLocation = sameAsStart ? startLocation : end.trim()
+  const selectedEndCoordinates = sameAsStart
+    ? selectedStartCoordinates
+    : endCoordinates
 
   const valid = Boolean(
-    (startMode === 'address' ? startLocation : !usingFallback) &&
+    (startMode === 'current' ? !usingFallback : startCoordinates) &&
+      (sameAsStart || endCoordinates) &&
+      startLocation &&
       endLocation &&
       duration &&
       routeType,
   )
+
+  const autocompleteBias = usingFallback ? undefined : currentLocation
 
   return (
     <Screen
@@ -46,18 +68,13 @@ export function Plan() {
         <Button
           disabled={!valid}
           onClick={() => {
-            if (duration && routeType) {
+            if (duration && routeType && selectedStartCoordinates) {
               updateDraft({
                 plan: {
                   startLocation,
-                  startCoordinates:
-                    startMode === 'current'
-                      ? {
-                          lat: currentLocation[0],
-                          lon: currentLocation[1],
-                        }
-                      : undefined,
+                  startCoordinates: selectedStartCoordinates,
                   endLocation,
+                  endCoordinates: selectedEndCoordinates,
                   duration,
                   routeType,
                 },
@@ -109,10 +126,18 @@ export function Plan() {
       </Field>
 
       {startMode === 'address' ? (
-        <TextInput
+        <GooglePlaceAutocomplete
           value={start}
-          onChange={(event) => setStart(event.target.value)}
-          placeholder="e.g. University of Melbourne"
+          placeholder="Search for a starting place"
+          locationBias={autocompleteBias}
+          onInputChange={(value) => {
+            setStart(value)
+            setStartCoordinates(undefined)
+          }}
+          onPlaceSelect={(place) => {
+            setStart(place.name)
+            setStartCoordinates(place.coordinates)
+          }}
         />
       ) : (
         <p className="text-sm text-muted">
@@ -133,10 +158,18 @@ export function Plan() {
 
         {!sameAsStart ? (
           <Field label="End">
-            <TextInput
+            <GooglePlaceAutocomplete
               value={end}
-              onChange={(event) => setEnd(event.target.value)}
-              placeholder="e.g. Work"
+              placeholder="Search for a destination"
+              locationBias={autocompleteBias}
+              onInputChange={(value) => {
+                setEnd(value)
+                setEndCoordinates(undefined)
+              }}
+              onPlaceSelect={(place) => {
+                setEnd(place.name)
+                setEndCoordinates(place.coordinates)
+              }}
             />
           </Field>
         ) : null}

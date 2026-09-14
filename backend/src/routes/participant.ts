@@ -4,7 +4,7 @@ import { currentUser, requireAuth, requireParticipant } from '../auth/middleware
 import { notFound, parse } from '../errors'
 import { Account } from '../models/Account'
 import { Condition } from '../models/Condition'
-import { buildRouteOptions } from '../services/routeTemplates'
+import { generateWalkingRoute } from '../services/openRouteService'
 import { scaleScript } from '../services/scriptTemplate'
 import { generateRoutesSchema, scriptQuerySchema } from '../validation'
 
@@ -13,10 +13,20 @@ export const participantRouter = Router()
 // than with router.use(), which would run for every request in the app.
 
 /** POST /routes/generate: always exactly three options. */
-participantRouter.post('/routes/generate', requireAuth, requireParticipant, async (req, res) => {
-  const body = parse(generateRoutesSchema, req.body)
-  res.json({ routes: buildRouteOptions(body.duration) })
-})
+/** POST /routes/generate: generates a real walking route for the selected plan. */
+participantRouter.post(
+  '/routes/generate',
+  requireAuth,
+  requireParticipant,
+  async (req, res) => {
+    const body = parse(generateRoutesSchema, req.body)
+    const route = await generateWalkingRoute(body)
+
+    res.json({
+      routes: [route],
+    })
+  },
+)
 
 /** GET /scripts?duration=: the condition comes from the account, never the query. */
 participantRouter.get('/scripts', requireAuth, requireParticipant, async (req, res) => {

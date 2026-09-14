@@ -32,6 +32,10 @@ export interface WalkPlan {
     lat: number
     lon: number
   }
+  endCoordinates?: {
+  lat: number
+  lon: number
+  }
   duration: WalkDuration
   routeType: RouteType
 }
