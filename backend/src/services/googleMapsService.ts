@@ -1,5 +1,14 @@
 import { config } from '../config'
 
+function mapsKey(): string {
+  if (!config.GOOGLE_MAPS_API_KEY) {
+    throw new Error(
+      'GOOGLE_MAPS_API_KEY is not set. Add it to the repo-root .env (see .env.example) to enable route generation.',
+    )
+  }
+  return config.GOOGLE_MAPS_API_KEY
+}
+
 export type LngLat = [longitude: number, latitude: number]
 
 export interface ComputedRoute {
@@ -38,7 +47,7 @@ export async function geocodeLocation(
   url.searchParams.set('address', location)
   url.searchParams.set('components', 'country:AU')
   url.searchParams.set('region', 'au')
-  url.searchParams.set('key', config.GOOGLE_MAPS_API_KEY)
+  url.searchParams.set('key', mapsKey())
 
   if (near) {
     const [longitude, latitude] = near
@@ -129,7 +138,7 @@ export async function computeGoogleRoutes(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Goog-Api-Key': config.GOOGLE_MAPS_API_KEY,
+      'X-Goog-Api-Key': mapsKey(),
       'X-Goog-FieldMask':
         'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline',
     },

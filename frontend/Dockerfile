@@ -2,7 +2,9 @@
 # time (Vite inlines VITE_* variables), so pass it as a build arg.
 FROM node:22-alpine AS build
 ARG VITE_API_BASE_URL=http://localhost:8000/v1
+ARG VITE_GOOGLE_MAPS_API_KEY=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 WORKDIR /repo
 # The app imports ../shared, so the build needs both folders.
 COPY shared ./shared

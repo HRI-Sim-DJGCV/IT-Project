@@ -1,6 +1,12 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import path from 'node:path'
 import { z } from 'zod'
+
+// The universal .env lives at the repo root; a backend/.env, if present,
+// overrides it, and variables already in the environment win over both.
+dotenv.config({
+  path: [path.resolve('.env'), path.resolve('../.env')],
+})
 
 const schema = z.object({
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required (see backend/.env)'),
@@ -10,9 +16,8 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(8000),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   NODE_ENV: z.string().default('development'),
-  GOOGLE_MAPS_API_KEY: z
-    .string()
-    .min(1, 'GOOGLE_MAPS_API_KEY is required (see backend/.env)'),
+  /** Optional so the API can boot without it (e.g. the keyless docker quick start); route generation errors until it is set. */
+  GOOGLE_MAPS_API_KEY: z.string().default(''),
   OVERPASS_API_URL: z
     .string()
     .url()

@@ -53,6 +53,8 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       AI_SERVICE_URL: http://ai-stub:8001
       AUDIO_DIR: /repo/backend/data/audio
+      # Taken from the repo-root .env if you have one; route generation errors without it.
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -69,6 +71,8 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         VITE_API_BASE_URL: http://localhost:8000/v1
+        # Taken from the repo-root .env if you have one; the place autocomplete needs it.
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
     ports:
       - "5173:80"
     depends_on:

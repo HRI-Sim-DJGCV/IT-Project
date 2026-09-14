@@ -1,0 +1,3 @@
+# The universal environment file (copy of .env.example). Never commit it.
+.env
+.env.local
