@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Router } from 'express'
+import rateLimit from 'express-rate-limit'
 import { Types } from 'mongoose'
 import { SURVEY_VERSION } from '../../../shared/survey'
 import type { LoginResponse, PreparationResponse, WalkHistoryResponse } from '../../../shared/types'
@@ -60,8 +61,12 @@ async function participantCondition(userId: string) {
   return { account, condition }
 }
 
+// Each preparation spends OpenAI credits and minutes of TTS compute, so cap
+// starts per IP. Polling GET /me/walks/prepare/{id} is deliberately unlimited.
+const prepareLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false })
+
 /** POST /me/walks/prepare: start generating. Returns 202 immediately; poll GET /me/walks/prepare/{id}. */
-meRouter.post('/walks/prepare', requireParticipant, async (req, res) => {
+meRouter.post('/walks/prepare', prepareLimiter, requireParticipant, async (req, res) => {
   const user = currentUser(req)
   const body = parse(prepareWalkSchema, req.body)
   const { account, condition } = await participantCondition(user.id)

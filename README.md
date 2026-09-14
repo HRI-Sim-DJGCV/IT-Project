@@ -23,7 +23,9 @@ Wait for `api ... listening on http://localhost:8000/v1` in the logs (the first 
 | Research admin | `admin` | `admin` | Admin dashboard |
 | Medical professional | `doctor` | `doctor` | Admin dashboard |
 
-This starts a local MongoDB (seeded with the logins above), the API, the web app, and a **stub AI service** that returns a canned route, a fixed script and silent audio. Every screen works, including the full walk flow; you just won't hear a voice or see your real address on the map. Walks saved this way are marked `stub-model` in the database.
+This starts a local MongoDB (seeded with the logins above), the API, the web app, and a **stub AI service** that returns a fixed script and silent audio. Every screen works, including the full walk flow; you just won't hear a voice. Walks saved this way are marked `stub-model` in the database.
+
+Route generation calls Google Maps from the Node API, so it needs keys: copy `.env.example` to `.env` at the repo root, fill in `GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY`, and compose picks them up on the next `up --build`. Without them the app runs but generating a route shows an error.
 
 ```bash
 docker compose down        # stop
@@ -72,11 +74,18 @@ The first start downloads the ~1.2 GB voice model. On a CPU, generating a walk's
 
 Use this when you are changing code and want hot reload, or when you want the API on the team's Atlas cluster instead of the local Mongo.
 
+First, create the universal env file at the repo root (once):
+
+```bash
+cp .env.example .env     # MONGODB_URI, JWT_SECRET, Google Maps keys, VITE_API_BASE_URL, …
+```
+
+The API, the web app and docker compose all read this one file. A `backend/.env`, if you have one, overrides it for the API.
+
 ### API (`backend/`)
 
 ```bash
 cd backend
-cp .env.example .env     # MONGODB_URI (Atlas, or mongodb://localhost:27017 after `docker compose up mongo`), JWT_SECRET
 npm install
 npm run seed             # only for a fresh local database; Atlas already has the demo logins
 npm run dev              # http://localhost:8000/v1, reloads on save
@@ -88,10 +97,11 @@ npm run dev              # http://localhost:8000/v1, reloads on save
 
 ```bash
 cd frontend
-cp .env.example .env     # VITE_API_BASE_URL=http://localhost:8000/v1
 npm install
 npm run dev              # http://localhost:5173, hot reload
 ```
+
+Vite reads `VITE_*` variables from the repo-root `.env` (a `frontend/.env` is no longer read).
 
 ### AI service, stub or real
 
@@ -120,11 +130,11 @@ Set `TTS_ENABLED=false` in `server/.env` to skip the voice model while working o
 ## Deploying
 
 - **Frontend**: Vercel, Root Directory `frontend`, env `VITE_API_BASE_URL=https://<api-host>/v1`. `frontend/vercel.json` handles SPA routes.
-- **API + AI service**: one host running the real overlay above, with `MONGODB_URI` pointed at Atlas (a VM with a GPU makes audio generation fast; the existing AWS EC2 notes are in `server/READList/`). Set `AI_INTERNAL_KEY` in `backend/.env` and the same value as `INTERNAL_KEY` in `server/.env` so nothing but the API can call the AI service. Put the API behind nginx/TLS and allow the Vercel origin in `CORS_ORIGINS`.
+- **API + AI service**: one host running the real overlay above, with `MONGODB_URI` pointed at Atlas (a VM with a GPU makes audio generation fast; the existing AWS EC2 notes are in `server/READList/`). Set `AI_INTERNAL_KEY` in the root `.env` and the same value as `INTERNAL_KEY` in `server/.env` so nothing but the API can call the AI service. Put the API behind nginx/TLS and allow the Vercel origin in `CORS_ORIGINS`.
 
 ## Secrets
 
-Never commit `.env` files (all three folders ignore them; commit the `.env.example` files instead). A Google Maps key was committed on an earlier branch and must be treated as leaked: rotate it in Google Cloud Console. The quick-start Compose file uses a fixed dev JWT secret on purpose; it is not for production.
+Never commit `.env` files (the root `.gitignore` and each folder's ignore them; commit the `.env.example` files instead). A Google Maps key was committed on an earlier branch and must be treated as leaked: rotate it in Google Cloud Console. The quick-start Compose file uses a fixed dev JWT secret on purpose; it is not for production.
 
 ## Notes
 

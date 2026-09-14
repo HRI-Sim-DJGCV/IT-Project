@@ -23,5 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local API URL
+# Local API URL and keys
 .env
+.env.local

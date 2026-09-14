@@ -32,9 +32,11 @@ export interface LatLon {
 
 export interface WalkPlan {
   startLocation: string
-  /** Set when the participant chose "use my current location" instead of typing an address */
+  /** Set when the participant used their current location or picked the start from the place autocomplete */
   startCoordinates?: LatLon
   endLocation: string
+  /** Set when the participant picked the end from the place autocomplete */
+  endCoordinates?: LatLon
   duration: WalkDuration
   routeType: RouteType
 }

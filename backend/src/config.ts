@@ -1,6 +1,12 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import path from 'node:path'
 import { z } from 'zod'
+
+// The universal .env lives at the repo root; a backend/.env, if present,
+// overrides it, and variables already in the environment win over both.
+dotenv.config({
+  path: [path.resolve('.env'), path.resolve('../.env')],
+})
 
 const schema = z.object({
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required (see backend/.env)'),
@@ -10,6 +16,12 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(8000),
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   NODE_ENV: z.string().default('development'),
+  /** Optional so the API can boot without it (e.g. the keyless docker quick start); route generation errors until it is set. */
+  GOOGLE_MAPS_API_KEY: z.string().default(''),
+  OVERPASS_API_URL: z
+    .string()
+    .url()
+    .default('https://overpass-api.de/api/interpreter'),
   /** The internal Python AI service (routes, script generation, text-to-speech). Never exposed to the app. */
   AI_SERVICE_URL: z.string().url().default('http://localhost:8001'),
   /** Optional shared secret sent as X-Internal-Key; set the same value in server/.env */
@@ -22,14 +34,16 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env)
 if (!parsed.success) {
-  const lines = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`)
+  const lines = parsed.error.issues.map(
+    (issue) => `  ${issue.path.join('.')}: ${issue.message}`,
+  )
   throw new Error(`Invalid environment:\n${lines.join('\n')}`)
 }
 
 export const config = {
   ...parsed.data,
   corsOrigins: parsed.data.CORS_ORIGINS.split(',')
-    .map((s) => s.trim())
+    .map((origin) => origin.trim())
     .filter(Boolean),
   isProduction: parsed.data.NODE_ENV === 'production',
   audioDir: path.resolve(parsed.data.AUDIO_DIR),

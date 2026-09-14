@@ -1,0 +1,8 @@
+# The universal environment file (copy of .env.example). Never commit it.
+.env
+.env.local
+
+# Stray root-level installs; real dependencies live in backend/ and frontend/.
+node_modules/
+package.json
+package-lock.json

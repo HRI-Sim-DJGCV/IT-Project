@@ -26,6 +26,7 @@ export const planSchema = z.object({
   startLocation: z.string().trim().min(1).max(200),
   startCoordinates: latLonSchema.optional(),
   endLocation: z.string().trim().min(1).max(200),
+  endCoordinates: latLonSchema.optional(),
   duration: durationSchema,
   routeType: routeTypeSchema,
 })

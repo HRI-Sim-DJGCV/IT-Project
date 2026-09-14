@@ -2,10 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "frontend",
+      "name": "api",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "frontend", "--", "--port", "5173"],
+      "runtimeArgs": ["run", "dev", "--prefix", "backend"],
+      "port": 8000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
       "port": 5173
+    },
+    {
+      "name": "ai-stub",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/ai-stub/stub.mjs"],
+      "port": 8001
     }
   ]
 }
