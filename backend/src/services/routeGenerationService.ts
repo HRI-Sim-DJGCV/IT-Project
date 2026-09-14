@@ -136,12 +136,39 @@ async function addGreenCandidates(
   return [...routes, ...(await runCandidates(requests))]
 }
 
-function selectBest(
+function haversineMetres(first: [number, number], second: [number, number]): number {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180
+  const earthRadius = 6_371_000
+  const latitudeDelta = radians(second[0] - first[0])
+  const longitudeDelta = radians(second[1] - first[1])
+  const value =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(radians(first[0])) *
+      Math.cos(radians(second[0])) *
+      Math.sin(longitudeDelta / 2) ** 2
+  return 2 * earthRadius * Math.asin(Math.sqrt(value))
+}
+
+function samplePoints(path: Array<[number, number]>, count: number): Array<[number, number]> {
+  const step = (path.length - 1) / (count - 1)
+  return Array.from({ length: count }, (_, i) => path[Math.round(i * step)] as [number, number])
+}
+
+/** Two candidates count as the same walk when most of their sampled points nearly coincide. */
+function isSimilarRoute(first: ComputedRoute, second: ComputedRoute): boolean {
+  const a = samplePoints(first.mapPath, 5)
+  const b = samplePoints(second.mapPath, 5)
+  const close = a.filter((point, i) => haversineMetres(point, b[i] as [number, number]) < 80).length
+  return close >= 4
+}
+
+function selectBestRoutes(
   routes: ComputedRoute[],
   targetSeconds: number,
   routeType: RouteType,
   environment: RouteEnvironment | undefined,
-): ComputedRoute {
+  count = 3,
+): ComputedRoute[] {
   if (routes.length === 0) {
     throw new Error('No valid route candidates could be generated.')
   }
@@ -152,7 +179,7 @@ function selectBest(
   )
   const eligible = withinTolerance.length > 0 ? withinTolerance : routes
 
-  return [...eligible].sort((first, second) => {
+  const ranked = [...eligible].sort((first, second) => {
     const rank = (route: ComputedRoute) => {
       const durationError = Math.abs(route.durationSeconds - targetSeconds) / targetSeconds
       const scores = environment?.score(route)
@@ -170,10 +197,19 @@ function selectBest(
         : durationError * 5 - preference * 0.25
     }
     return rank(first) - rank(second)
-  })[0] as ComputedRoute
+  })
+
+  // Best first, skipping near-duplicates so the options genuinely differ.
+  const picked: ComputedRoute[] = []
+  for (const route of ranked) {
+    if (picked.some((existing) => isSimilarRoute(existing, route))) continue
+    picked.push(route)
+    if (picked.length === count) break
+  }
+  return picked
 }
 
-export async function generateWalkingRoute(plan: WalkPlan): Promise<RouteOption> {
+export async function generateWalkingRoutes(plan: WalkPlan): Promise<RouteOption[]> {
   const start: LngLat = plan.startCoordinates
     ? [plan.startCoordinates.lon, plan.startCoordinates.lat]
     : await geocodeLocation(plan.startLocation)
@@ -212,13 +248,6 @@ export async function generateWalkingRoute(plan: WalkPlan): Promise<RouteOption>
     }
   }
 
-  const route = selectBest(candidates, targetSeconds, plan.routeType, environment)
-  const estimatedMinutes = Math.max(1, Math.round(route.durationSeconds / 60))
-  const difference = Math.abs(estimatedMinutes - plan.duration)
-  const durationNote =
-    difference <= Math.max(2, Math.round(plan.duration * 0.1))
-      ? `It matches the ${plan.duration}-minute target.`
-      : `The closest safe route is ${estimatedMinutes} minutes; the selected locations cannot make an exact ${plan.duration}-minute walk.`
   let typeNote: string
   switch (plan.routeType) {
     case 'loop':
@@ -239,19 +268,29 @@ export async function generateWalkingRoute(plan: WalkPlan): Promise<RouteOption>
       break
   }
 
-  const mapPath = thinPath(route.mapPath)
-  const first = mapPath[0] as [number, number]
-  const last = mapPath[mapPath.length - 1] as [number, number]
-  return {
-    id: `google-osm-${plan.routeType}-route`,
-    name: routeTypeName(plan.routeType),
-    description: `${typeNote} ${durationNote}`,
-    distanceKm: Number((route.distanceMetres / 1000).toFixed(2)),
-    estimatedMinutes,
-    path: normalisePath(mapPath),
-    mapPath,
-    origin: { lat: first[0], lon: first[1] },
-    destination: { lat: last[0], lon: last[1] },
-    park: null,
-  }
+  const best = selectBestRoutes(candidates, targetSeconds, plan.routeType, environment)
+  return best.map((route, index) => {
+    const estimatedMinutes = Math.max(1, Math.round(route.durationSeconds / 60))
+    const difference = Math.abs(estimatedMinutes - plan.duration)
+    const durationNote =
+      difference <= Math.max(2, Math.round(plan.duration * 0.1))
+        ? `It matches the ${plan.duration}-minute target.`
+        : `This option is ${estimatedMinutes} minutes; the selected locations cannot make an exact ${plan.duration}-minute walk.`
+
+    const mapPath = thinPath(route.mapPath)
+    const first = mapPath[0] as [number, number]
+    const last = mapPath[mapPath.length - 1] as [number, number]
+    return {
+      id: `google-osm-${plan.routeType}-route-${index + 1}`,
+      name: index === 0 ? routeTypeName(plan.routeType) : `${routeTypeName(plan.routeType)} · option ${index + 1}`,
+      description: `${typeNote} ${durationNote}`,
+      distanceKm: Number((route.distanceMetres / 1000).toFixed(2)),
+      estimatedMinutes,
+      path: normalisePath(mapPath),
+      mapPath,
+      origin: { lat: first[0], lon: first[1] },
+      destination: { lat: last[0], lon: last[1] },
+      park: null,
+    }
+  })
 }
