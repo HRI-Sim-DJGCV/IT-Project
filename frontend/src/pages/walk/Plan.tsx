@@ -16,25 +16,28 @@ export function Plan() {
   const navigate = useNavigate()
   const { draft, updateDraft } = useSession()
   const { currentLocation, usingFallback } = useCurrentLocation()
+  const initialRouteType = draft?.plan?.routeType ?? null
 
   const [startMode, setStartMode] = useState<StartMode>('address')
   const [start, setStart] = useState(draft?.plan?.startLocation ?? '')
-  const [startCoordinates, setStartCoordinates] = useState<
-    Coordinates | undefined
-  >(draft?.plan?.startCoordinates)
+  const [startCoordinates, setStartCoordinates] = useState<Coordinates | undefined>(
+    draft?.plan?.startCoordinates,
+  )
   const [end, setEnd] = useState(draft?.plan?.endLocation ?? '')
-  const [endCoordinates, setEndCoordinates] = useState<
-    Coordinates | undefined
-  >(draft?.plan?.endCoordinates)
+  const [endCoordinates, setEndCoordinates] = useState<Coordinates | undefined>(
+    draft?.plan?.endCoordinates,
+  )
   const [sameAsStart, setSameAsStart] = useState(
-    !draft?.plan || draft.plan.endLocation === draft.plan.startLocation,
+    initialRouteType === 'loop'
+      ? true
+      : initialRouteType === 'out_and_back'
+        ? false
+        : !draft?.plan || draft.plan.endLocation === draft.plan.startLocation,
   )
   const [duration, setDuration] = useState<WalkDuration | null>(
     draft?.plan?.duration ?? null,
   )
-  const [routeType, setRouteType] = useState<RouteType | null>(
-    draft?.plan?.routeType ?? null,
-  )
+  const [routeType, setRouteType] = useState<RouteType | null>(initialRouteType)
 
   const currentCoordinates: Coordinates = {
     lat: currentLocation[0],
@@ -42,23 +45,40 @@ export function Plan() {
   }
   const selectedStartCoordinates =
     startMode === 'current' ? currentCoordinates : startCoordinates
+  const returnsToStart = routeType === 'loop' ||
+    (routeType !== 'out_and_back' && sameAsStart)
   const startLocation =
     startMode === 'current' ? 'Current location' : start.trim()
-  const endLocation = sameAsStart ? startLocation : end.trim()
-  const selectedEndCoordinates = sameAsStart
+  const endLocation = returnsToStart ? startLocation : end.trim()
+  const selectedEndCoordinates = returnsToStart
     ? selectedStartCoordinates
     : endCoordinates
+  const needsSelectedEnd = routeType === 'out_and_back' || !returnsToStart
 
   const valid = Boolean(
-    (startMode === 'current' ? !usingFallback : startCoordinates) &&
-      (sameAsStart || endCoordinates) &&
-      startLocation &&
-      endLocation &&
+    routeType &&
       duration &&
-      routeType,
+      startLocation &&
+      (startMode === 'current' ? !usingFallback : startCoordinates) &&
+      (!needsSelectedEnd || (endLocation && endCoordinates)),
   )
 
   const autocompleteBias = usingFallback ? undefined : currentLocation
+
+  const changeRouteType = (nextRouteType: RouteType) => {
+    setRouteType(nextRouteType)
+
+    if (nextRouteType === 'loop') {
+      // A loop always ends at its start. Remove stale destination data so it
+      // cannot accidentally be sent to the backend.
+      setSameAsStart(true)
+      setEnd('')
+      setEndCoordinates(undefined)
+    } else if (nextRouteType === 'out_and_back') {
+      // Out-and-back always needs a participant-selected turnaround point.
+      setSameAsStart(false)
+    }
+  }
 
   return (
     <Screen
@@ -68,7 +88,12 @@ export function Plan() {
         <Button
           disabled={!valid}
           onClick={() => {
-            if (duration && routeType && selectedStartCoordinates) {
+            if (
+              duration &&
+              routeType &&
+              selectedStartCoordinates &&
+              selectedEndCoordinates
+            ) {
               updateDraft({
                 plan: {
                   startLocation,
@@ -80,7 +105,6 @@ export function Plan() {
                 },
                 route: undefined,
               })
-
               navigate('/walk/select')
             }
           }}
@@ -95,7 +119,6 @@ export function Plan() {
           showCurrentLocationMarker={!usingFallback}
           className="h-40"
         />
-
         <p className="text-xs text-muted">
           {usingFallback
             ? 'Showing University of Melbourne because your location is unavailable.'
@@ -106,14 +129,7 @@ export function Plan() {
       <Field label="Start">
         <select
           value={startMode}
-          onChange={(event) => {
-            const mode = event.target.value as StartMode
-            setStartMode(mode)
-
-            if (mode === 'current') {
-              setSameAsStart(false)
-            }
-          }}
+          onChange={(event) => setStartMode(event.target.value as StartMode)}
           className="w-full rounded-xl border border-line bg-card px-4 py-3"
         >
           <option value="address">Enter an address</option>
@@ -145,35 +161,73 @@ export function Plan() {
         </p>
       )}
 
-      <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={sameAsStart}
-            onChange={(event) => setSameAsStart(event.target.checked)}
-            className="h-5 w-5 accent-primary"
-          />
-          End where I started
-        </label>
-
-        {!sameAsStart ? (
-          <Field label="End">
-            <GooglePlaceAutocomplete
-              value={end}
-              placeholder="Search for a destination"
-              locationBias={autocompleteBias}
-              onInputChange={(value) => {
-                setEnd(value)
-                setEndCoordinates(undefined)
-              }}
-              onPlaceSelect={(place) => {
-                setEnd(place.name)
-                setEndCoordinates(place.coordinates)
-              }}
-            />
-          </Field>
-        ) : null}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">Type of route</span>
+        <Chips
+          options={ROUTE_TYPES}
+          value={routeType}
+          onChange={changeRouteType}
+          columns={2}
+        />
       </div>
+
+      {routeType === 'loop' ? (
+        <p className="rounded-xl border border-line bg-card px-4 py-3 text-sm text-muted">
+          A loop returns to your starting point, so no end address is needed.
+        </p>
+      ) : routeType === 'out_and_back' ? (
+        <Field label="Turnaround point">
+          <GooglePlaceAutocomplete
+            value={end}
+            placeholder="Where should the walk turn around?"
+            locationBias={autocompleteBias}
+            onInputChange={(value) => {
+              setEnd(value)
+              setEndCoordinates(undefined)
+            }}
+            onPlaceSelect={(place) => {
+              setEnd(place.name)
+              setEndCoordinates(place.coordinates)
+            }}
+          />
+          <p className="mt-1 text-xs text-muted">
+            The route will go to this place and follow the same path back.
+          </p>
+        </Field>
+      ) : routeType ? (
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={sameAsStart}
+              onChange={(event) => setSameAsStart(event.target.checked)}
+              className="h-5 w-5 accent-primary"
+            />
+            End where I started
+          </label>
+          {!sameAsStart ? (
+            <Field label="End">
+              <GooglePlaceAutocomplete
+                value={end}
+                placeholder="Search for a destination"
+                locationBias={autocompleteBias}
+                onInputChange={(value) => {
+                  setEnd(value)
+                  setEndCoordinates(undefined)
+                }}
+                onPlaceSelect={(place) => {
+                  setEnd(place.name)
+                  setEndCoordinates(place.coordinates)
+                }}
+              />
+            </Field>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-sm text-muted">
+          Select a route type to choose how the walk should end.
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">Duration</span>
@@ -184,16 +238,6 @@ export function Plan() {
           }))}
           value={duration}
           onChange={setDuration}
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Type of route</span>
-        <Chips
-          options={ROUTE_TYPES}
-          value={routeType}
-          onChange={setRouteType}
-          columns={2}
         />
       </div>
     </Screen>
