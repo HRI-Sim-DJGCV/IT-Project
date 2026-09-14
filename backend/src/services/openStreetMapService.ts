@@ -96,7 +96,7 @@ function nearestFeature(
   for (const feature of features) {
     // Checking every third point keeps scoring fast without losing useful detail.
     for (let index = 0; index < feature.geometry.length; index += 3) {
-      const distance = haversineMetres(point, feature.geometry[index])
+      const distance = haversineMetres(point, feature.geometry[index] as LngLat)
       if (distance < nearestDistance) {
         nearestDistance = distance
         nearest = feature
@@ -112,8 +112,8 @@ function pointInPolygon(point: LngLat, polygon: LngLat[]): boolean {
   const [longitude, latitude] = point
 
   for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current++) {
-    const [currentLongitude, currentLatitude] = polygon[current]
-    const [previousLongitude, previousLatitude] = polygon[previous]
+    const [currentLongitude, currentLatitude] = polygon[current] as LngLat
+    const [previousLongitude, previousLatitude] = polygon[previous] as LngLat
     const crosses =
       currentLatitude > latitude !== previousLatitude > latitude &&
       longitude <
@@ -133,7 +133,7 @@ function sampleRoute(route: ComputedRoute): LngLat[] {
   const samples: LngLat[] = []
 
   for (let index = 0; index < points.length; index += step) {
-    const [latitude, longitude] = points[index]
+    const [latitude, longitude] = points[index] as [number, number]
     samples.push([longitude, latitude])
   }
 
@@ -221,8 +221,8 @@ export async function loadRouteEnvironment(
     greenWaypoints(limit = 8) {
       const candidates = [
         ...greenAreas.map((feature) => centreOfGeometry(feature.geometry)),
-        ...greenPaths.map((feature) =>
-          feature.geometry[Math.floor(feature.geometry.length / 2)],
+        ...greenPaths.map(
+          (feature) => feature.geometry[Math.floor(feature.geometry.length / 2)] as LngLat,
         ),
       ]
       return candidates.slice(0, limit)

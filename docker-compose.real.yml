@@ -1,0 +1,21 @@
+# Overlay that swaps the stub for the real Python AI service.
+# Needs server/.env with GOOGLE_MAPS_API_KEY and OPENAI_API_KEY.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.real.yml --profile real up --build
+#
+# First start downloads the ~1.2 GB voice model into the hf-cache volume.
+
+services:
+  api:
+    environment:
+      AI_SERVICE_URL: http://ai:8001
+    # Replace (not merge) the base dependencies so the stub is no longer required.
+    depends_on: !override
+      seed:
+        condition: service_completed_successfully
+      ai:
+        condition: service_started
+
+  # Park the stub behind a profile nobody enables, so only the real service runs.
+  ai-stub:
+    profiles: ["stub-only"]

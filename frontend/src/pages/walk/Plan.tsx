@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-
+import { DURATIONS, ROUTE_TYPES, ROUTE_TYPE_LABELS } from '@shared/survey'
 import { GooglePlaceAutocomplete } from '../../components/GooglePlaceAutocomplete'
 import { RouteMap } from '../../components/RouteMap'
 import { Button, Chips, Field, Screen } from '../../components/ui'
 import { useSession } from '../../context/SessionContext'
 import { useCurrentLocation } from '../../hooks/useCurrentLocation'
-import { DURATIONS, ROUTE_TYPES } from '../../mock/data'
 import type { RouteType, WalkDuration } from '../../types'
 
 type StartMode = 'address' | 'current'
@@ -18,8 +17,12 @@ export function Plan() {
   const { currentLocation, usingFallback } = useCurrentLocation()
   const initialRouteType = draft?.plan?.routeType ?? null
 
-  const [startMode, setStartMode] = useState<StartMode>('address')
-  const [start, setStart] = useState(draft?.plan?.startLocation ?? '')
+  const [startMode, setStartMode] = useState<StartMode>(
+    draft?.plan?.startLocation === 'Current location' ? 'current' : 'address',
+  )
+  const [start, setStart] = useState(
+    draft?.plan?.startLocation === 'Current location' ? '' : (draft?.plan?.startLocation ?? ''),
+  )
   const [startCoordinates, setStartCoordinates] = useState<Coordinates | undefined>(
     draft?.plan?.startCoordinates,
   )
@@ -103,7 +106,10 @@ export function Plan() {
                   duration,
                   routeType,
                 },
+                // A new plan invalidates any route and generated script.
                 route: undefined,
+                preparationId: undefined,
+                script: undefined,
               })
               navigate('/walk/select')
             }
@@ -134,9 +140,7 @@ export function Plan() {
         >
           <option value="address">Enter an address</option>
           <option value="current" disabled={usingFallback}>
-            {usingFallback
-              ? 'Current location unavailable'
-              : 'Use my current location'}
+            {usingFallback ? 'Current location unavailable' : 'Use my current location'}
           </option>
         </select>
       </Field>
@@ -156,15 +160,13 @@ export function Plan() {
           }}
         />
       ) : (
-        <p className="text-sm text-muted">
-          Your current coordinates will be used as the starting point.
-        </p>
+        <p className="text-sm text-muted">Your current coordinates will be used as the starting point.</p>
       )}
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">Type of route</span>
         <Chips
-          options={ROUTE_TYPES}
+          options={ROUTE_TYPES.map((value) => ({ value, label: ROUTE_TYPE_LABELS[value] }))}
           value={routeType}
           onChange={changeRouteType}
           columns={2}
@@ -231,14 +233,7 @@ export function Plan() {
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">Duration</span>
-        <Chips
-          options={DURATIONS.map((item) => ({
-            value: item,
-            label: `${item} min`,
-          }))}
-          value={duration}
-          onChange={setDuration}
-        />
+        <Chips options={DURATIONS.map((item) => ({ value: item, label: `${item} min` }))} value={duration} onChange={setDuration} />
       </div>
     </Screen>
   )

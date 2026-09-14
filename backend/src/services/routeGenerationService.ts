@@ -8,6 +8,7 @@ import {
   loadRouteEnvironment,
   type RouteEnvironment,
 } from './openStreetMapService'
+import { normalisePath, thinPath } from './polyline'
 
 type RouteRequest = () => Promise<ComputedRoute[]>
 const WALKING_METRES_PER_SECOND = 1.3
@@ -169,7 +170,7 @@ function selectBest(
         : durationError * 5 - preference * 0.25
     }
     return rank(first) - rank(second)
-  })[0]
+  })[0] as ComputedRoute
 }
 
 export async function generateWalkingRoute(plan: WalkPlan): Promise<RouteOption> {
@@ -238,13 +239,19 @@ export async function generateWalkingRoute(plan: WalkPlan): Promise<RouteOption>
       break
   }
 
+  const mapPath = thinPath(route.mapPath)
+  const first = mapPath[0] as [number, number]
+  const last = mapPath[mapPath.length - 1] as [number, number]
   return {
     id: `google-osm-${plan.routeType}-route`,
     name: routeTypeName(plan.routeType),
     description: `${typeNote} ${durationNote}`,
     distanceKm: Number((route.distanceMetres / 1000).toFixed(2)),
     estimatedMinutes,
-    path: route.mapPath,
-    mapPath: route.mapPath,
+    path: normalisePath(mapPath),
+    mapPath,
+    origin: { lat: first[0], lon: first[1] },
+    destination: { lat: last[0], lon: last[1] },
+    park: null,
   }
 }

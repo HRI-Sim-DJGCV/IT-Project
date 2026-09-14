@@ -1,27 +1,33 @@
 # Backend API specification
 
-**Status:** implemented in [`backend/`](../backend/) (phase 1 participant endpoints and the phase 2 admin endpoints). The frontend still calls its mock layer; see §6 for the switch. Companion to [frontend-domain-model.md](frontend-domain-model.md); entity shapes are defined there and referenced here.
+**Status:** implemented in [`backend/`](../backend/) and wired to the frontend. Companion to [frontend-domain-model.md](frontend-domain-model.md); entity shapes live in [`shared/types.ts`](../shared/types.ts), which both sides import.
 
-The backend is a Node/TypeScript HTTP API over MongoDB that the React frontend calls in place of its current mock layer ([`frontend/src/api/index.ts`](../frontend/src/api/index.ts)). The team chose TypeScript over the originally drafted Python so the frontend and backend share one language, one toolchain and, via [`shared/`](../shared/), one copy of the domain types and the scoring rule.
+The backend is a Node/TypeScript HTTP API over MongoDB. It is the **only** thing the React app talks to. Behind it sits an internal Python AI service ([`server/`](../server/)) that the API calls for routes, script generation and text-to-speech; the app never reaches that service and never holds the Google or OpenAI keys.
+
+```
+frontend ──HTTPS + JWT──▶ backend (Node, :8000) ──HTTP + X-Internal-Key──▶ server (Python, :8001)
+                              │
+                          MongoDB Atlas
+```
 
 ## 1. Stack and conventions
 
 | Concern | Choice | Why |
 |---|---|---|
-| Framework | **Express 5** | Most widely known Node server; async handlers propagate errors to the one error handler |
-| Mongo driver | **Mongoose** | Schema-typed documents that mirror `shared/types.ts`; the teammate's draft collections were also created with Mongoose |
+| Framework | **Express 5** | Async handlers propagate errors to the one error handler |
+| Mongo driver | **Mongoose** | Schema-typed documents that mirror `shared/types.ts` |
 | Validation | **Zod** schema for every request body and query (`backend/src/validation.ts`) | Rejects bad input before it touches the DB, with a per-field error list |
-| Auth | Short-lived **JWT** (access token) in an `Authorization: Bearer` header | Stateless, works across Vercel (frontend) and a separate API host; no cookie/CORS complications |
+| Auth | Short-lived **JWT** (access token) in an `Authorization: Bearer` header | Stateless, works across Vercel (frontend) and a separate API host |
 | Passwords | `bcryptjs`, cost 10 | Standard |
 | Shared code | `shared/types.ts`, `shared/survey.ts`, `shared/scoring.ts` | One definition of the wire types, the survey items and the calm-score rule |
-| Hosting | Any container host (Render, Railway, Fly.io) or a small VM. **Not Vercel** (persistent Mongo connection) | |
-| Database | MongoDB Atlas, database `walkingapp` | The team's existing cluster; see §3 for collection naming |
+| AI service | FastAPI in `server/`, called through `backend/src/services/aiClient.ts` | Routes (Google Routes + Places), scripts (OpenAI), audio (Qwen3-TTS). Internal only |
+| Audio storage | mp3 files under `AUDIO_DIR/<preparationId>/<index>.mp3`, streamed by the API | Simple, no extra service; a Docker volume in Compose |
+| Hosting | One host running `docker compose up api ai` | The AI service must not be publicly reachable |
+| Database | MongoDB Atlas, database `walkingapp` | The team's existing cluster |
 
-Run locally with `npm run dev` in `backend/` (see the README). Environment variables are documented in `backend/.env.example`.
+**Base URL:** `https://api.<domain>/v1` (dev: `http://localhost:8000/v1`).
 
-**Base URL:** `https://api.<domain>/v1` (dev: `http://localhost:8000/v1`). Version prefix from day one so breaking changes can go to `/v2`.
-
-**Content type:** JSON everywhere. Dates are ISO 8601 strings in UTC (`2026-09-05T08:15:00Z`). IDs are strings.
+**Content type:** JSON everywhere except audio (`audio/mpeg`) and the CSV export. Dates are ISO 8601 strings in UTC. IDs are strings.
 
 **CORS:** allow the Vercel production origin and `*.vercel.app` preview origins; allow `Authorization` and `Content-Type` headers.
 
@@ -33,284 +39,194 @@ Every non-2xx response uses one shape:
 { "error": { "code": "INVALID_CREDENTIALS", "message": "Incorrect user ID or password." } }
 ```
 
-`message` is safe to show to the user verbatim. `code` is stable and machine-readable. Standard codes:
-
 | HTTP | code | When |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | Body/query fails schema. Include `details: [{ field, message }]` |
-| 401 | `UNAUTHENTICATED` | Missing/expired/invalid token |
-| 401 | `INVALID_CREDENTIALS` | Login failed (don't reveal which part) |
-| 403 | `FORBIDDEN` | Valid token, wrong role, or accessing another participant's data |
+| 400 | `VALIDATION_ERROR` | Body/query fails schema (`details: [{ field, message }]`), or an address could not be found |
+| 401 | `UNAUTHENTICATED` | Missing/expired/invalid token. The app signs out on this |
+| 401 | `INVALID_CREDENTIALS` | Login or access-code failure (never says which part) |
+| 403 | `FORBIDDEN` | Valid token, wrong role, or another participant's data |
 | 404 | `NOT_FOUND` | |
-| 409 | `CONFLICT` | e.g. duplicate walk id, access code already used |
-| 500 | `INTERNAL` | Never leak stack traces |
+| 409 | `CONFLICT` | e.g. duplicate condition id, saving a walk whose preparation is not ready |
+| 410 | `NOT_FOUND` | Audio for a preparation was purged; prepare again |
+| 502 | `AI_SERVICE` | The AI service failed or is unreachable |
+| 500 | `INTERNAL` | Never leaks stack traces |
 
 ### Auth model
 
-- `POST /auth/login` returns an access token (JWT, ~24 h) containing `sub` (user id), `role`, and for participants `condition`.
+- `POST /auth/login` returns an access token (JWT, 24 h) containing `sub` (user id), `role`, and for participants `condition`.
 - Every other endpoint requires `Authorization: Bearer <token>` unless marked public.
-- **The server derives identity from the token, never from the request body.** A participant can only read/write their own walks; the `participantId` in a walk is set from the token, not accepted from the client.
-- Refresh tokens are out of scope for phase 1; on 401 the frontend sends the user back to login.
+- **The server derives identity from the token, never from the request body.** A participant can only read/write their own walks and preparations.
+- On 401 the app drops the session and returns to login. Refresh tokens are out of scope.
 
-## 2. Phase 1 — participant endpoints
-
-These five endpoints replace the five functions in the mock API, one for one.
+## 2. Participant endpoints
 
 ### 2.1 `POST /auth/login` (public)
 
-Replaces `login(role, userId, password)`.
+Body `{ role, userId, password }`, `role` ∈ `participant | medical_professional | researcher`. Wrong role is `INVALID_CREDENTIALS`, not a hint. Rate-limited to 20/min per IP. User IDs are matched case-insensitively.
 
-Request:
-```json
-{ "role": "participant", "userId": "AAA001", "password": "••••" }
-```
+Response `200`: `{ token, expiresAt, role, participant }` (`participant` is `null` for admin roles).
 
-`role` ∈ `participant | medical_professional | researcher`. The server checks the account actually has that role; logging in as the wrong role is `INVALID_CREDENTIALS`, not a hint.
+### 2.2 `POST /auth/access-code` (public)
 
-Response `200`:
-```json
-{
-  "token": "<jwt>",
-  "expiresAt": "2026-09-06T08:15:00Z",
-  "role": "participant",
-  "participant": {
-    "id": "AAA001",
-    "displayName": "Participant AAA001",
-    "condition": "A",
-    "joinedAt": "2026-08-12T09:00:00Z"
-  }
-}
-```
+A participant's first login. Body `{ userId, accessCode, password }` (password ≥ 8). Verifies the code against the stored hash, sets the password, clears the code, returns the same body as `/auth/login`. A used, wrong or missing code is `INVALID_CREDENTIALS`. Own rate-limit bucket.
 
-`participant` is `null` for non-participant roles.
+### 2.3 `GET /me`
 
-Errors: `INVALID_CREDENTIALS`. Rate-limited to 20 requests per minute per IP (`429`); `/auth/access-code` has its own separate bucket. User IDs are matched case-insensitively (`demo` and `DEMO` are the same account).
+Current user, same shape as the login response minus the token. Used to validate a stored token on app load.
 
-### 2.2 `GET /me`
+### 2.4 `GET /me/walks`
 
-Returns the current user, same shape as the login response minus the token. Lets the frontend restore a session from a stored token on refresh.
+Participant only. Query `limit` (default 50, max 200), `before` (ISO cursor). Response `{ walks: WalkRecord[], nextBefore }`, newest first. Each `WalkRecord` carries server-computed `scores` (§4) and the `script` that was read (§3).
 
-### 2.3 `GET /me/walks`
+### 2.5 `POST /routes/generate`
 
-Replaces `getWalkHistory(participantId)`. Participant only.
+Participant only. Body: the full `WalkPlan` (`startLocation`, optional `startCoordinates`, `endLocation`, `duration`, `routeType`). The API asks the AI service to geocode the addresses (or use the coordinates), compute the direct walking route, and find parks along it whose detour still fits the duration.
 
-Query: `limit` (default 50, max 200), `before` (ISO date cursor for paging, optional).
+Response `200`: `{ routes: RouteOption[] }`. The first option is always the direct walk; up to two more are detours via a park (`park` set), each with real geometry in `mapPath` (`[lat, lon]` points), a 0–100 `path` for the fallback drawing, and `origin`/`destination` coordinates the script generator needs later.
 
-Response `200`:
-```json
-{
-  "walks": [ <WalkRecord>, ... ],
-  "nextBefore": "2026-08-30T08:15:00Z"
-}
-```
+An address Google cannot find comes back as `400 VALIDATION_ERROR` with the Places message.
 
-Sorted newest first. `nextBefore` is `null` when there are no more. Each `WalkRecord` matches the domain model **plus** a server-computed `scores` object (see §4).
+### 2.6 `POST /me/walks/prepare`
 
-### 2.4 `POST /routes/generate`
+Participant only. Body `{ plan, route }` (the chosen `RouteOption`, echoed back unchanged). Creates a **walk preparation** and starts generating in the background:
 
-Replaces `generateRoutes(duration)`. Participant only.
+1. `generating_script`: the AI service writes a meditation for this walk (route, weather, elevation, park or not, time budget). The text is split into three sections (focused attention → compassion → closing, 20/40/40 of the walk) and then into short spoken segments, each given an `atSecond`.
+2. `generating_audio`: one mp3 per segment from the AI service, using the **voice of the participant's condition** (`voice`/`age` → speaker + a soothing delivery instruction, see `backend/src/services/voice.ts`). `progress.done/total` counts files.
+3. `ready` or `failed` (with `error`).
 
-Request — the full `WalkPlan`, because real routing needs the locations and type, not just the duration:
-```json
-{
-  "startLocation": "Home",
-  "endLocation": "Home",
-  "duration": 30,
-  "routeType": "loop"
-}
-```
+Response `202`: `{ preparation: WalkPreparation }` with `status: "pending"`. Poll:
 
-Response `200`:
-```json
-{ "routes": [ <RouteOption>, <RouteOption>, <RouteOption> ] }
-```
+### 2.7 `GET /me/walks/prepare/{id}`
 
-Phase 1 returns the same three template routes the mock did (`backend/src/services/routeTemplates.ts`). Until routing is real only `duration` is required; the other plan fields are accepted and ignored, so the current frontend (which sends just the duration) works unchanged. When a map/routing provider or the landmark model is adopted this endpoint calls it server-side (keeps the provider API key off the client) and `RouteOption.path` changes to real geometry — see open question in the domain model. Always return exactly three options so the UI doesn't need to handle variable counts.
+`{ preparation }` with `status`, `progress`, `error` and, once `ready`, `script` (a `GeneratedScript`: `model`, `promptVersion`, `context`, `voice`, `segments[]`, `rawText`). Another participant's preparation is `404`.
 
-### 2.5 `GET /scripts`
+### 2.8 `GET /me/walks/prepare/{id}/audio/{index}`
 
-Replaces `getScript(durationMinutes)`. Participant only.
+The mp3 for one segment (`audio/mpeg`). The app downloads every segment with its token before the walk starts so playback does not depend on the network. `410` if the file has been purged.
 
-Query: `duration` (15 | 30 | 45).
+### 2.9 `POST /me/walks`
 
-The **condition is taken from the token**, not the query, so a participant cannot request another arm's script.
+Participant only, called once from the post-survey screen; abandoned walks are never posted.
 
-Response `200`:
-```json
-{
-  "condition": "A",
-  "scriptVersion": 3,
-  "segments": [ { "atSecond": 0, "title": "Welcome", "text": "..." }, ... ]
-}
-```
+Body `{ clientId, date, plan, route, preSurvey, postSurvey, actualMinutes, preparationId }`.
 
-`atSecond` values are already scaled to the requested duration. `scriptVersion` identifies the exact text served (see §3, `conditions`), and the frontend passes it back when saving the walk.
+- Both surveys must contain exactly the active survey items, each 1–4.
+- `clientId` is an idempotency key: a retry returns the existing record with `200`.
+- `preparationId` must be one of the participant's own `ready` preparations; the stored `script` is copied onto the walk. Otherwise `409`.
+- `condition` is copied from the **account** at save time.
 
-### 2.6 `POST /me/walks`
-
-Replaces `saveWalk(record)`. Participant only. Called once, from the post-survey screen; abandoned walks are never posted.
-
-Request:
-```json
-{
-  "clientId": "w-1757059200000",
-  "date": "2026-09-05T08:15:00Z",
-  "plan": { "startLocation": "Home", "endLocation": "Home", "duration": 30, "routeType": "loop" },
-  "route": <RouteOption>,
-  "preSurvey":  { "calm": 2, "tense": 3, "at_ease": 2, "worried": 3 },
-  "postSurvey": { "calm": 3, "tense": 2, "at_ease": 3, "worried": 2 },
-  "actualMinutes": 31,
-  "scriptVersion": 3
-}
-```
-
-Validation:
-- `preSurvey` and `postSurvey` must both be present and contain exactly the active survey item keys, each 1–4.
-- `duration` ∈ {15, 30, 45}; `routeType` ∈ the four known values; `actualMinutes` ≥ 1.
-- `clientId` is the frontend's draft id; the server uses it as an **idempotency key** so a retried request doesn't create a duplicate (second attempt returns the existing record with `200`, not `409`).
-- **Compatibility:** the current frontend posts its whole `WalkRecord` (`id`, `participantId`, `completed`, …). The server accepts `id` as an alias for `clientId` and ignores `participantId` and `completed`; identity always comes from the token. Unknown fields are dropped.
-- `scriptVersion` is optional; when absent the condition's current version is recorded.
-- `condition` is copied onto the walk from the **account** at save time (not from the token), so a reassignment after login is honoured.
-
-Response `201` — the stored `WalkRecord` with server-assigned `id`, `participantId` (from token), `condition`, `completed: true`, `scriptVersion` and `scores`.
+Response `201`: the stored `WalkRecord` with `id`, `condition`, `script`, `scores`.
 
 ## 3. MongoDB collections
 
-Documents mirror the domain model. Field names are camelCase to match the frontend exactly (no snake_case translation layer to maintain). Mongoose models live in `backend/src/models/`; indexes are declared there and synced on every server start (`syncIndexes`), so no manual index setup is needed.
-
-**Naming.** All three collections live in the team's `walkingapp` database, alongside the draft collections for the later landmark-guided model (`users`, `walks`, `routes`, `landmarks`, `scriptsegments`, `audiofiles`, `voiceprofiles`, `firebaseusers`). To avoid colliding with those drafts, this API uses **`accounts`** (this spec's "users") and **`walkRecords`** (this spec's "walks"). Mongoose schemas for the draft collections are checked in under `backend/src/models/` (`User`, `Walk`, `Route`, `Landmark`, `ScriptSegment`, `AudioFile`, `VoiceProfile`, `SessionLog`, `FirebaseUser`) for the later phase, but no endpoint uses them and the server does not register them, so their indexes are not touched on startup.
+Field names are camelCase to match the frontend exactly. Mongoose models live in `backend/src/models/`; indexes are synced on every server start.
 
 ### `accounts`
 
-One document per login, all roles.
+One document per login, all roles. Participants hold **no personal or clinical data**.
 
 ```jsonc
 {
   "_id": "AAA001",                 // login user ID; participant IDs are AAA### style
-  "role": "participant",           // participant | medical_professional | researcher
+  "role": "participant",
   "passwordHash": "...",           // null until the access code is redeemed
   "displayName": "Participant AAA001",
   "condition": "A",                // participants only; references conditions._id
-  "accessCodeHash": "…sha256…",    // participants only; the code itself is never stored; null after redemption
+  "accessCodeHash": "…sha256…",    // null after redemption
   "accessCodeUsedAt": null,
   "joinedAt": "2026-08-12T09:00:00Z",
-  "createdBy": "researcher01",     // admin who created the account
+  "createdBy": "researcher01",
   "active": true
 }
 ```
 
-Indexes: `_id` (default), `{ role: 1 }`, `{ accessCodeHash: 1 }` unique, partial (only documents where it is a string; a sparse index would still index the many `null`s and collide).
+Indexes: `{ role: 1 }`, `{ accessCodeHash: 1 }` unique partial.
+
+### `conditions`
+
+Admin-defined experimental arms. **A condition changes only the voice.** There is no script field: scripts are generated per walk (decision 2026-09-13, "AI-generated walk only, never a fixed script").
+
+```jsonc
+{ "_id": "A", "name": "Condition A", "voice": "Male", "age": 30, "updatedAt": "...", "updatedBy": "researcher01" }
+```
+
+`voice` is `Male | Female | Neutral` or a Qwen3-TTS speaker name; `age` shapes the delivery instruction.
+
+### `walkPreparations`
+
+One per `POST /me/walks/prepare`. `{ participantId, condition, plan, route, context, status, progress, error, script, createdAt, updatedAt }`. Audio for it lives on disk under `AUDIO_DIR/<_id>/`. Anything still generating 30 min after its last update is marked `failed` on API start. Indexes: `{ participantId, createdAt }`, `{ status, updatedAt }`.
 
 ### `walkRecords`
 
-One document per completed walk. Surveys, plan and route are embedded — a walk is read as a unit and never partially updated.
+One document per completed walk. Surveys, plan, route and **the generated script** are embedded, so the record is self-contained for analysis.
 
 ```jsonc
 {
   "_id": ObjectId,
-  "clientId": "w-1757059200000",   // idempotency key from the frontend
+  "clientId": "w-1757059200000",
   "participantId": "AAA001",
-  "condition": "A",                // copied from the user at save time, so reassigning a participant later doesn't rewrite history
+  "condition": "A",
   "date": "2026-09-05T08:15:00Z",
-  "plan": { ... },
-  "route": { ... },
-  "preSurvey": { ... },
-  "postSurvey": { ... },
+  "plan": { "startLocation": "...", "endLocation": "...", "duration": 30, "routeType": "loop" },
+  "route": { "id": "park-…", "name": "Via University Square", "mapPath": [[lat, lon], …], "park": { "name": "...", "lat": 0, "lon": 0 }, … },
+  "preSurvey": { "calm": 2, "tense": 3, "at_ease": 2, "worried": 3 },
+  "postSurvey": { "calm": 3, "tense": 2, "at_ease": 3, "worried": 2 },
   "actualMinutes": 31,
-  "scriptVersion": 3,
+  "preparationId": ObjectId,
+  "script": {
+    "generator": "ai", "model": "gpt-4.1-mini", "promptVersion": 1,
+    "context": "A 30-minute walking meditation for stress regulation …",
+    "voice": { "speaker": "Ryan", "instruct": "Speak as a young meditation guide. Very slow, soft and calm. …" },
+    "segments": [ { "atSecond": 0, "section": "focused_attention", "title": "Focused attention 1/3", "text": "...", "audioIndex": 0 }, … ],
+    "rawText": "[FOCUSED_ATTENTION]\n…"
+  },
   "surveyVersion": 1,
   "completed": true,
   "createdAt": "2026-09-05T08:47:00Z"
 }
 ```
 
-Indexes: `{ participantId: 1, date: -1 }` (history query), `{ participantId: 1, clientId: 1 }` unique (idempotency), `{ condition: 1, date: -1 }` (dashboard).
-
-Do **not** store computed scores here (see §4).
-
-### `conditions`
-
-Admin-defined experimental arms. Each holds its own script.
-
-```jsonc
-{
-  "_id": "A",
-  "name": "Condition A",
-  "description": "Breathing-focused script",
-  "voice": "Male",                 // TTS persona that reads the script; edited on the admin Settings screen
-  "age": 30,                       // apparent age of the voice persona
-  "scriptVersion": 3,
-  "script": [                      // template; atFraction scaled to duration at request time
-    { "atFraction": 0.00, "title": "Welcome", "text": "..." },
-    { "atFraction": 0.06, "title": "Arriving", "text": "..." }
-  ],
-  "scriptHistory": [               // previous versions kept so scriptVersion on a walk is always resolvable
-    { "scriptVersion": 2, "script": [ ... ], "retiredAt": "..." }
-  ],
-  "updatedAt": "...",
-  "updatedBy": "researcher01"
-}
-```
-
-Editing a script increments `scriptVersion` and pushes the old one to `scriptHistory`.
-
-### `surveyItems` (optional)
-
-Only if researchers must edit items without a code deploy. Otherwise keep items in code and record `surveyVersion` on each walk. Recommendation: **keep in code for phase 1**, bump `surveyVersion` if items ever change.
+Indexes: `{ participantId: 1, date: -1 }`, `{ participantId: 1, clientId: 1 }` unique, `{ condition: 1, date: -1 }`. Do **not** store computed scores here (§4).
 
 ## 4. Derived scores
 
-Per the domain model decision, scores are computed on the backend at read time and never stored.
+Scores are computed on the backend at read time and never stored. Every `WalkRecord` the API returns includes `scores: { scoringVersion, pre: { calm }, post: { calm } | null, delta: { calm } | null }`.
 
-Every `WalkRecord` the API returns includes:
+`scoringVersion: 1`: for each survey, the sum of positive items (`calm`, `at_ease`) plus reverse-scored negatives (`5 − score` for `tense`, `worried`). Range 4–16. One function, [`shared/scoring.ts`](../shared/scoring.ts), used by the walks endpoints, `GET /admin/stats`, the participant list and the CSV export. The frontend only displays it.
 
-```json
-"scores": {
-  "scoringVersion": 1,
-  "pre":   { "calm": 8 },
-  "post":  { "calm": 12 },
-  "delta": { "calm": 4 }
-}
-```
+## 5. Admin / researcher endpoints
 
-`scoringVersion: 1` definition — for each survey: sum of positive items (`calm`, `at_ease`) plus reverse-scored negatives (`5 − score` for `tense`, `worried`). Range 4–16. It lives in one function, [`shared/scoring.ts`](../shared/scoring.ts), used by the walks endpoints, `GET /admin/stats` and the CSV export alike. When the frontend switches to the real API, delete the client-side copy in `History.tsx` (or import the shared one).
-
-## 5. Phase 2 — admin / researcher endpoints
-
-Implemented, because the admin dashboard (PR #2) already calls them. Require `role ∈ { medical_professional, researcher }`; a participant token gets `403`. List responses are wrapped in an object (`{ "participants": [...] }`, `{ "conditions": [...] }`, `{ "walks": [...] }`) so fields can be added later without a breaking change.
+Require `role ∈ { medical_professional, researcher }`; a participant token gets `403`. List responses are wrapped in an object.
 
 | Method & path | Purpose |
 |---|---|
-| `GET /admin/participants` | `{ participants: AdminParticipantItem[] }`, most recently joined first. Each item: `id`, `condition`, `status` (`Not started` / `Completed`; `In progress` is reserved), `walkCount`, `lastWalkAt`, `active`, plus `stressStart` / `stressEnd` labels for the "tense" item of the latest walk (kept for the current UI; prefer `scores` from the walks endpoints) |
-| `POST /admin/participants` | Create a participant: body is `{ "condition": "A" }` only. Server assigns the next `AAA###` id and generates the access code. Returns `201 { participant, accessCode }`; the code is never returned again (only its hash is stored). `409` if the condition does not exist |
-| `PATCH /admin/participants/{id}` | Body `{ condition?, active? }`. Change condition / deactivate (a deactivated participant can no longer log in) |
-| `GET /admin/participants/{id}/walks` | A participant's walks (same shape as `/me/walks`) |
+| `GET /admin/participants` | `{ participants: AdminParticipantItem[] }`, most recently joined first: `id`, `condition`, `status`, `walkCount`, `lastWalkAt`, `latestScores` (scores of the latest walk or `null`), `active` |
+| `POST /admin/participants` | Body `{ condition }`. Server assigns the next `AAA###` id and the access code; returns `201 { participant, accessCode }`, the code exactly once |
+| `PATCH /admin/participants/{id}` | Body `{ condition?, active? }` |
+| `GET /admin/participants/{id}/walks` | A participant's walks |
 | `GET /admin/conditions` | `{ conditions: ConditionSetting[] }` (`id`, `name`, `voice`, `age`) |
-| `PUT /admin/conditions` | Replace the whole settings list, as the admin Settings screen saves it (body: `ConditionSetting[]` or `{ conditions: [...] }`). New ids are created with the default script; existing ones keep their script; nothing is deleted because participants and walks reference conditions. `409` on duplicate ids |
-| `PUT /admin/conditions/{id}` | Edit one condition: any of `name`, `voice`, `age`, `script`. Changing `script` pushes the old one to `scriptHistory` and bumps `scriptVersion`. Creates the condition (`201`) if the id is new and `name`, `voice`, `age` are all given |
-| `GET /admin/walks` | `{ walks: WalkRecord[] }` across all participants, newest first, each with `condition` and `scores`. Feeds the client-side CSV until the UI uses `export.csv` |
-| `GET /admin/stats` | `{ scoringVersion, totals: { participants, walks }, perCondition: [{ condition, name, participants, walks, meanPreCalm, meanPostCalm, meanDeltaCalm }] }` — feeds the dashboard |
-| `GET /admin/export.csv` | `text/csv` download, one row per walk: participant id, condition, walk id, date, planned minutes, route type, route name, distance, actual minutes, completed, every raw survey answer pre/post, the three calm scores, `scoring_version`, `script_version`, `survey_version` |
-| `POST /auth/access-code` (public) | Participant's first login. Body `{ userId, accessCode, password }` (password ≥ 8 chars). Verifies the code against the stored hash (case-insensitive), sets the password, clears the code, and returns the same body as `/auth/login`. A used, wrong or missing code is `INVALID_CREDENTIALS`. Backs the "Access with code" button |
+| `PUT /admin/conditions` | Replace the whole settings list. Nothing is deleted because participants and walks reference conditions. `409` on duplicate ids |
+| `PUT /admin/conditions/{id}` | Edit `name`, `voice`, `age`. **There is no way to upload or edit a script.** Unknown fields are dropped |
+| `GET /admin/walks` | Every walk, newest first, with `condition`, `scores` and `script` |
+| `GET /admin/stats` | `{ scoringVersion, totals, perCondition: [{ condition, name, participants, walks, meanPreCalm, meanPostCalm, meanDeltaCalm }] }` |
+| `GET /admin/export.csv` | One row per walk: ids, dates, plan, route (incl. `via_park`), raw answers pre/post, the three calm scores, `scoring_version`, `survey_version`, `script_model`, `script_prompt_version`, `script_voice`, `script_word_count`, `script_text` |
 
-## 6. Frontend migration checklist
+## 6. AI service contract (internal)
 
-The backend exists; the frontend change is confined to one file plus token handling:
+`server/main.py`. Every call except `/health` must carry `X-Internal-Key` when `INTERNAL_KEY` is set (mirror of `AI_INTERNAL_KEY` in `backend/.env`).
 
-1. Add `VITE_API_BASE_URL` to `frontend/.env` (and the Vercel project env). Dev value: `http://localhost:8000/v1`.
-2. Rewrite each function in `frontend/src/api/index.ts` as a `fetch` to the matching endpoint; keep the function signatures so no component changes. Note the list envelopes: `GET /me/walks` → `.walks`, `GET /admin/participants` → `.participants`, `GET /admin/conditions` → `.conditions`, `GET /admin/walks` → `.walks`; `saveAdminConditions(list)` → `PUT /admin/conditions`.
-3. Store the JWT in memory + `sessionStorage` inside `SessionContext`; attach it as `Authorization` in the API layer; on `401`, call `signOut()`.
-4. Pass `scriptVersion` from `GET /scripts` through the `WalkDraft` to `POST /me/walks` (optional; the server defaults it).
-5. Read `scores` from the API in `History.tsx` and delete `calmScore()`.
-6. Point `frontend/src/types.ts` imports at `shared/types.ts` (identical shapes, plus `scores`) so the two sides cannot drift.
-7. Delete `frontend/src/mock/data.ts` (or keep behind a `VITE_USE_MOCK=true` flag for offline demos — recommended, since the phone-frame demo is useful without a backend).
+| Method & path | Body → response |
+|---|---|
+| `GET /health` | `{ status, tts: ready \| loading \| disabled \| unavailable }` |
+| `POST /route/generate-from-text` | `{ start_location, start_coordinates?, end_location, total_travel_time (s), park_polylines }` → `{ origin, destination, baseline: { duration_s, distance_m, polyline }, parks: [{ park, added_s, slack_s, route? }] }` |
+| `POST /script/generate` | `{ source, destination, total_walking_time, context, park?, park_timing? }` → `{ script, model, prompt_version }` |
+| `POST /tts` | `{ text, language, speaker, instruct, bitrate }` → `audio/mpeg` bytes |
 
 ## 7. Open points
 
-- **Token lifetime vs. walk length.** A 45-minute walk plus surveys must fit inside the token's life. 24 h is safe; don't go shorter than 2 h without refresh tokens.
-- **Routing provider.** Decide before implementing `/routes/generate` for real. It changes `RouteOption.path`'s format and adds a server-side API key.
-- **Where the calm-score rule is documented for the ethics/research protocol.** `shared/scoring.ts` should cite it.
-- **Landmark model.** The draft collections for landmark-guided walks (routes with GeoJSON, landmarks, per-landmark script segments, audio files, voice profiles) coexist in `walkingapp`. When that phase starts, `POST /routes/generate` and `GET /scripts` are the integration points; `walkRecords` can gain a `landmarkEvents` array without a breaking change. Conditions' `voice`/`age` likely map onto `voiceprofiles`.
-- **Collection rename.** `accounts` / `walkRecords` were chosen to avoid the draft `users` / `walks`. If the drafts are dropped or moved to another database, the team may rename to the spec's original names.
-- **Backups / data retention** for a research dataset — Atlas snapshots are probably sufficient, but confirm with the research lead.
-- **Health notes on participants.** The first admin UI draft (PR #2) had a free-text "clinical notes / contraindications" field per participant. It was removed before merge: participants are anonymised `AAA###` ids and storing clinical notes changes the data-protection and ethics posture of the trial. Do not add such a field to `accounts` until the research lead confirms it is covered by the protocol, and if it is, specify who can read it (probably `medical_professional` only) and whether it is excluded from exports.
+- **Generation time.** On CPU the TTS step can take several minutes for a 45-minute walk. A GPU host makes it seconds. Decide the hosting before the trial starts; the Prepare screen tolerates either but participants will wait.
+- **Audio retention.** mp3 files are kept per preparation. Decide whether audio is research data (keep with backups) or disposable (purge after N days; the walk keeps the text either way).
+- **Weather and elevation** enrich the prompt when the Google Weather / Elevation APIs are enabled on the key; they degrade gracefully to "unknown" otherwise.
+- **Backups / data retention** for a research dataset: Atlas snapshots are probably sufficient, confirm with the research lead.
+- **Health notes on participants.** Deliberately absent (anonymised `AAA###` ids). Do not add such a field until the research lead confirms it is covered by the protocol.
+- **Landmark model.** The draft Mongoose schemas (`User`, `Walk`, `Route`, `Landmark`, …) in `backend/src/models/` are unused and unregistered. Delete or revive when that phase is decided.

@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { SCORING_VERSION, calmScore } from '../../../shared/scoring'
-import { SURVEY_ITEMS, SURVEY_VERSION, scaleLabel } from '../../../shared/survey'
+import { SCORING_VERSION, calmScore, walkScores } from '../../../shared/scoring'
+import { SURVEY_ITEMS, SURVEY_VERSION } from '../../../shared/survey'
 import type { AdminParticipantItem, CreateParticipantResult, SurveyResponse } from '../../../shared/types'
 import { currentUser, requireAdmin, requireAuth } from '../auth/middleware'
 import { conflict, notFound, parse } from '../errors'
@@ -9,7 +9,6 @@ import { Condition } from '../models/Condition'
 import { WalkRecord, type WalkRecordDoc } from '../models/WalkRecord'
 import { generateAccessCode, hashAccessCode } from '../services/accessCode'
 import { nextParticipantId } from '../services/participantIds'
-import { DEFAULT_SCRIPT } from '../services/scriptTemplate'
 import { toConditionSetting, toWalkRecord } from '../services/serializers'
 import {
   conditionListSchema,
@@ -22,7 +21,8 @@ export const adminRouter = Router()
 adminRouter.use(requireAuth, requireAdmin)
 
 // ---------------------------------------------------------------------------
-// Conditions
+// Conditions: name + voice persona only. Scripts are AI-generated per walk
+// and can never be uploaded or edited here.
 // ---------------------------------------------------------------------------
 
 /** GET /admin/conditions */
@@ -33,8 +33,7 @@ adminRouter.get('/conditions', async (_req, res) => {
 
 /**
  * PUT /admin/conditions: replace the whole settings list (what the admin
- * Settings screen saves). New ids are created with the default script;
- * existing ones keep their script. Conditions are never deleted here because
+ * Settings screen saves). Conditions are never deleted here because
  * participants and walks reference them.
  */
 adminRouter.put('/conditions', async (req, res) => {
@@ -51,10 +50,7 @@ adminRouter.put('/conditions', async (req, res) => {
     items.map((c) => ({
       updateOne: {
         filter: { _id: c.id },
-        update: {
-          $set: { name: c.name, voice: c.voice, age: c.age, updatedAt: now, updatedBy: user.id },
-          $setOnInsert: { scriptVersion: 1, script: DEFAULT_SCRIPT, scriptHistory: [] },
-        },
+        update: { $set: { name: c.name, voice: c.voice, age: c.age, updatedAt: now, updatedBy: user.id } },
         upsert: true,
       },
     })),
@@ -63,7 +59,7 @@ adminRouter.put('/conditions', async (req, res) => {
   res.json({ conditions: docs.map(toConditionSetting) })
 })
 
-/** PUT /admin/conditions/{id}: edit one condition. Changing `script` bumps scriptVersion. */
+/** PUT /admin/conditions/{id}: edit one condition's name, voice or age. */
 adminRouter.put('/conditions/:id', async (req, res) => {
   const user = currentUser(req)
   const id = String(req.params.id)
@@ -72,28 +68,13 @@ adminRouter.put('/conditions/:id', async (req, res) => {
   const now = new Date()
   if (!existing) {
     if (!body.name || !body.voice || body.age === undefined) throw notFound('Condition')
-    const created = await Condition.create({
-      _id: id,
-      name: body.name,
-      voice: body.voice,
-      age: body.age,
-      scriptVersion: 1,
-      script: body.script ?? DEFAULT_SCRIPT,
-      scriptHistory: [],
-      updatedAt: now,
-      updatedBy: user.id,
-    })
+    const created = await Condition.create({ _id: id, name: body.name, voice: body.voice, age: body.age, updatedAt: now, updatedBy: user.id })
     res.status(201).json(toConditionSetting(created.toObject()))
     return
   }
   if (body.name !== undefined) existing.name = body.name
   if (body.voice !== undefined) existing.voice = body.voice
   if (body.age !== undefined) existing.age = body.age
-  if (body.script) {
-    existing.scriptHistory.push({ scriptVersion: existing.scriptVersion, script: existing.script, retiredAt: now })
-    existing.script = body.script
-    existing.scriptVersion += 1
-  }
   existing.updatedAt = now
   existing.updatedBy = user.id
   await existing.save()
@@ -126,8 +107,7 @@ function toAdminItem(a: AccountDoc, s: WalkSummary | undefined): AdminParticipan
     status: latest ? (latest.completed ? 'Completed' : 'In progress') : 'Not started',
     walkCount: s?.count ?? 0,
     lastWalkAt: latest ? new Date(latest.date).toISOString() : null,
-    stressStart: scaleLabel(latest?.preSurvey.tense),
-    stressEnd: scaleLabel(latest?.postSurvey?.tense),
+    latestScores: latest ? walkScores(latest.preSurvey, latest.postSurvey ?? null) : null,
     active: a.active,
   }
 }
@@ -204,7 +184,7 @@ adminRouter.get('/participants/:id/walks', async (req, res) => {
 // Walks, stats, export
 // ---------------------------------------------------------------------------
 
-/** GET /admin/walks: every walk, newest first, with `condition` and `scores`. */
+/** GET /admin/walks: every walk, newest first, with `condition`, `scores` and the generated script. */
 adminRouter.get('/walks', async (_req, res) => {
   const docs = await WalkRecord.find().sort({ date: -1 }).lean()
   res.json({ walks: docs.map(toWalkRecord) })
@@ -241,7 +221,7 @@ adminRouter.get('/stats', async (_req, res) => {
 
 const csvQuote = (v: unknown) => `"${(v === null || v === undefined ? '' : String(v)).replace(/"/g, '""')}"`
 
-/** GET /admin/export.csv: one row per walk, raw answers plus derived scores. */
+/** GET /admin/export.csv: one row per walk, raw answers plus derived scores and the script that was read. */
 adminRouter.get('/export.csv', async (_req, res) => {
   const docs = await WalkRecord.find().sort({ date: -1 }).lean()
   const headers = [
@@ -252,6 +232,7 @@ adminRouter.get('/export.csv', async (_req, res) => {
     'planned_minutes',
     'route_type',
     'route_name',
+    'via_park',
     'distance_km',
     'actual_minutes',
     'completed',
@@ -261,8 +242,12 @@ adminRouter.get('/export.csv', async (_req, res) => {
     'post_calm_score',
     'delta_calm_score',
     'scoring_version',
-    'script_version',
     'survey_version',
+    'script_model',
+    'script_prompt_version',
+    'script_voice',
+    'script_word_count',
+    'script_text',
   ]
   const rows = docs.map((w) => {
     const r = toWalkRecord(w)
@@ -274,6 +259,7 @@ adminRouter.get('/export.csv', async (_req, res) => {
       w.plan.duration,
       w.plan.routeType,
       w.route.name,
+      w.route.park?.name ?? '',
       w.route.distanceKm,
       w.actualMinutes,
       w.completed,
@@ -283,8 +269,12 @@ adminRouter.get('/export.csv', async (_req, res) => {
       r.scores?.post?.calm ?? '',
       r.scores?.delta?.calm ?? '',
       SCORING_VERSION,
-      w.scriptVersion,
       w.surveyVersion ?? SURVEY_VERSION,
+      w.script?.model ?? '',
+      w.script?.promptVersion ?? '',
+      w.script?.voice.speaker ?? '',
+      w.script ? w.script.rawText.split(/\s+/).filter(Boolean).length : '',
+      w.script?.rawText ?? '',
     ]
   })
   const csv = [headers, ...rows].map((row) => row.map(csvQuote).join(',')).join('\r\n') + '\r\n'

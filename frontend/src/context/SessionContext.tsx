@@ -1,12 +1,8 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type {
-  Participant,
-  Role,
-  RouteOption,
-  SurveyResponse,
-  WalkPlan,
-} from '../types'
+import { getMe } from '../api'
+import { setAuthToken, setUnauthorizedHandler } from '../api/http'
+import type { GeneratedScript, Participant, Role, RouteOption, SurveyResponse, WalkPlan } from '../types'
 
 /** Everything gathered during one walk flow, built up screen by screen. */
 export interface WalkDraft {
@@ -15,17 +11,25 @@ export interface WalkDraft {
   preSurvey?: SurveyResponse
   plan?: WalkPlan
   route?: RouteOption
+  /** Set once the server has started generating this walk's script and audio */
+  preparationId?: string
+  /** The generated script, copied here when the preparation is ready */
+  script?: GeneratedScript
   actualMinutes?: number
 }
 
 interface SessionState {
+  token: string | null
+  expiresAt: string | null
   role: Role | null
   participant: Participant | null
   draft: WalkDraft | null
 }
 
 interface SessionContextValue extends SessionState {
-  signIn: (role: Role, participant: Participant | null) => void
+  /** True while a stored token is being checked against the server on first load */
+  restoring: boolean
+  signIn: (auth: { token: string; expiresAt: string; role: Role; participant: Participant | null }) => void
   signOut: () => void
   startDraft: () => WalkDraft
   updateDraft: (patch: Partial<WalkDraft>) => void
@@ -33,15 +37,21 @@ interface SessionContextValue extends SessionState {
 }
 
 const STORAGE_KEY = 'wm.session'
+const EMPTY: SessionState = { token: null, expiresAt: null, role: null, participant: null, draft: null }
 
 function load(): SessionState {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as SessionState
+    if (raw) {
+      const parsed = { ...EMPTY, ...(JSON.parse(raw) as Partial<SessionState>) }
+      // An expired token is as good as none.
+      if (parsed.expiresAt && new Date(parsed.expiresAt).getTime() <= Date.now()) return EMPTY
+      return parsed
+    }
   } catch {
     /* ignore */
   }
-  return { role: null, participant: null, draft: null }
+  return EMPTY
 }
 
 function persist(state: SessionState) {
@@ -55,31 +65,56 @@ function persist(state: SessionState) {
 const SessionContext = createContext<SessionContextValue | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SessionState>(load)
+  const [state, setState] = useState<SessionState>(() => {
+    const s = load()
+    setAuthToken(s.token)
+    return s
+  })
+  const [restoring, setRestoring] = useState(() => state.token !== null)
 
   const update = useCallback((patch: Partial<SessionState>) => {
     setState((prev) => {
       const next = { ...prev, ...patch }
       persist(next)
+      setAuthToken(next.token)
       return next
     })
   }, [])
 
-  const signIn = useCallback(
-    (role: Role, participant: Participant | null) =>
-      update({ role, participant, draft: null }),
+  const signIn = useCallback<SessionContextValue['signIn']>(
+    ({ token, expiresAt, role, participant }) => update({ token, expiresAt, role, participant, draft: null }),
     [update],
   )
-  const signOut = useCallback(
-    () => update({ role: null, participant: null, draft: null }),
-    [update],
-  )
+  const signOut = useCallback(() => update(EMPTY), [update])
+
+  // The API layer calls this when a token is rejected, so every screen drops back to login.
+  useEffect(() => {
+    setUnauthorizedHandler(signOut)
+    return () => setUnauthorizedHandler(null)
+  }, [signOut])
+
+  // On first load with a stored token, confirm it is still valid (and pick up a changed condition).
+  useEffect(() => {
+    if (!restoring) return
+    let cancelled = false
+    getMe()
+      .then((me) => {
+        if (!cancelled) update({ role: me.role, participant: me.participant })
+      })
+      .catch(() => {
+        if (!cancelled) signOut()
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const startDraft = useCallback(() => {
-    const draft: WalkDraft = {
-      id: `w-${Date.now()}`,
-      startedAt: new Date().toISOString(),
-    }
+    const draft: WalkDraft = { id: `w-${Date.now()}`, startedAt: new Date().toISOString() }
     update({ draft })
     return draft
   }, [update])
@@ -97,8 +132,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const clearDraft = useCallback(() => update({ draft: null }), [update])
 
   const value = useMemo<SessionContextValue>(
-    () => ({ ...state, signIn, signOut, startDraft, updateDraft, clearDraft }),
-    [state, signIn, signOut, startDraft, updateDraft, clearDraft],
+    () => ({ ...state, restoring, signIn, signOut, startDraft, updateDraft, clearDraft }),
+    [state, restoring, signIn, signOut, startDraft, updateDraft, clearDraft],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

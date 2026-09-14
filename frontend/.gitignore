@@ -22,8 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local API URL and keys
 .env
 .env.local
-
-server/.venv/
-server/__pycache__/

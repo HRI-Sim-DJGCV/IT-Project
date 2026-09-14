@@ -20,18 +20,18 @@ export const surveySchema = z
   .refine((s) => surveyKeys.every((k) => k in s), { message: `must contain ${surveyKeys.join(', ')}` })
   .refine((s) => Object.keys(s).every((k) => surveyKeys.includes(k)), { message: 'contains unknown survey items' })
 
-const coordinatesSchema = z.object({
-  lat: z.number().finite().min(-90).max(90),
-  lon: z.number().finite().min(-180).max(180),
-})
+export const latLonSchema = z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) })
+
 export const planSchema = z.object({
   startLocation: z.string().trim().min(1).max(200),
+  startCoordinates: latLonSchema.optional(),
   endLocation: z.string().trim().min(1).max(200),
-  startCoordinates: coordinatesSchema.optional(),
-  endCoordinates: coordinatesSchema.optional(),
+  endCoordinates: latLonSchema.optional(),
   duration: durationSchema,
   routeType: routeTypeSchema,
 })
+
+const point = z.tuple([z.number(), z.number()])
 
 export const routeSchema = z.object({
   id: z.string().min(1).max(100),
@@ -39,7 +39,11 @@ export const routeSchema = z.object({
   description: z.string().max(1000),
   distanceKm: z.number().nonnegative(),
   estimatedMinutes: z.number().nonnegative(),
-  path: z.array(z.tuple([z.number(), z.number()])).max(10_000),
+  path: z.array(point).max(10_000),
+  mapPath: z.array(point).min(2).max(10_000),
+  origin: latLonSchema,
+  destination: latLonSchema,
+  park: z.object({ name: z.string().min(1).max(200), lat: z.number(), lon: z.number() }).nullable(),
 })
 
 export const loginSchema = z.object({
@@ -54,34 +58,31 @@ export const accessCodeSchema = z.object({
   password: z.string().min(8, 'password must be at least 8 characters').max(200),
 })
 
-/**
- * POST /me/walks. Accepts the spec body (`clientId`) and, for compatibility
- * with the current frontend, the full WalkRecord it posts today (`id`,
- * `participantId`, `completed` are ignored; identity comes from the token).
- */
-export const saveWalkSchema = z
-  .object({
-    clientId: z.string().min(1).max(100).optional(),
-    id: z.string().min(1).max(100).optional(),
-    date: z.string().datetime({ offset: true }),
-    plan: planSchema,
-    route: routeSchema,
-    preSurvey: surveySchema,
-    postSurvey: surveySchema,
-    actualMinutes: z.number().int().min(1).max(600),
-    scriptVersion: z.number().int().positive().optional(),
-  })
-  .refine((b) => b.clientId || b.id, { message: 'clientId is required', path: ['clientId'] })
+/** POST /routes/generate: the full plan. Routing needs the locations, not just the duration. */
+export const generateRoutesSchema = planSchema
+
+/** POST /me/walks/prepare */
+export const prepareWalkSchema = z.object({
+  plan: planSchema,
+  route: routeSchema,
+})
+
+/** POST /me/walks. Identity comes from the token; the script comes from the preparation. */
+export const saveWalkSchema = z.object({
+  clientId: z.string().min(1).max(100),
+  date: z.string().datetime({ offset: true }),
+  plan: planSchema,
+  route: routeSchema,
+  preSurvey: surveySchema,
+  postSurvey: surveySchema,
+  actualMinutes: z.number().int().min(1).max(600),
+  preparationId: z.string().regex(/^[a-f0-9]{24}$/i, 'preparationId must be a walk preparation id'),
+})
 
 export const walkHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   before: z.string().datetime({ offset: true }).optional(),
 })
-
-
-export const generateRoutesSchema = planSchema
-
-export const scriptQuerySchema = z.object({ duration: durationSchema })
 
 export const conditionSettingSchema = z.object({
   id: z
@@ -97,15 +98,8 @@ export const conditionSettingSchema = z.object({
 
 export const conditionListSchema = z.array(conditionSettingSchema).min(1)
 
-export const conditionUpdateSchema = conditionSettingSchema
-  .omit({ id: true })
-  .partial()
-  .extend({
-    script: z
-      .array(z.object({ atFraction: z.number().min(0).max(1), title: z.string().min(1), text: z.string().min(1) }))
-      .min(1)
-      .optional(),
-  })
+/** PUT /admin/conditions/{id}: name, voice and age only. Scripts are never uploaded. */
+export const conditionUpdateSchema = conditionSettingSchema.omit({ id: true }).partial()
 
 export const createParticipantSchema = z.object({ condition: z.string().trim().min(1).max(20) })
 

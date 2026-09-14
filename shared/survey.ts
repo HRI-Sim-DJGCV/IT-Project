@@ -25,6 +25,13 @@ export const DURATIONS: WalkDuration[] = [15, 30, 45]
 
 export const ROUTE_TYPES: RouteType[] = ['loop', 'out_and_back', 'quiet_streets', 'green_space']
 
+export const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
+  loop: 'Loop',
+  out_and_back: 'Out and back',
+  quiet_streets: 'Quiet streets',
+  green_space: 'Park / green space',
+}
+
 export function scaleLabel(score: SurveyScore | undefined | null): string {
   return SURVEY_SCALE.find((s) => s.value === score)?.label ?? '–'
 }

@@ -19,7 +19,7 @@ interface GooglePlaceAutocompleteProps {
 let googleMapsPromise: Promise<void> | null = null
 
 function loadGoogleMaps(): Promise<void> {
-  if (window.google?.maps?.importLibrary) {
+  if (typeof window.google?.maps?.importLibrary === 'function') {
     return Promise.resolve()
   }
 
