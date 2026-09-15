@@ -50,7 +50,7 @@ services:
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB_NAME: walkingapp
       JWT_SECRET: local-docker-dev-only-secret-not-for-production-0123456789
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
       AI_SERVICE_URL: http://ai-stub:8001
       AUDIO_DIR: /repo/backend/data/audio
       # Taken from the repo-root .env if you have one; route generation errors without it.
