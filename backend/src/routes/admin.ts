@@ -272,7 +272,7 @@ adminRouter.get('/export.csv', async (_req, res) => {
       w.surveyVersion ?? SURVEY_VERSION,
       w.script?.model ?? '',
       w.script?.promptVersion ?? '',
-      w.script?.voice.speaker ?? '',
+      w.script?.voice.voiceName ?? '',
       w.script ? w.script.rawText.split(/\s+/).filter(Boolean).length : '',
       w.script?.rawText ?? '',
     ]

@@ -176,6 +176,6 @@ All functions in [`frontend/src/api/index.ts`](../frontend/src/api/index.ts) are
 | Save abandoned walks? | No. Only walks with both surveys are recorded. | 2026-09-05 |
 | Who owns the calm-score calculation? | Backend defines and returns it; frontend displays only. | 2026-09-05 |
 | Fixed script per condition or AI-generated per walk? | **AI-generated per walk, always.** No script upload or editing anywhere. A condition changes only the voice. The exact text is stored on each walk. | 2026-09-13 |
-| Browser speech synthesis or server-generated audio? | **Server-generated** (Qwen3-TTS via the AI service) with a slow, soft delivery instruction; the browser voice was not soothing enough. | 2026-09-13 |
+| Browser speech synthesis or server-generated audio? | **Server-generated** (Google Cloud Text-to-Speech via the AI service) with a slow, soft delivery (lower speaking rate and pitch); the browser voice was not soothing enough. | 2026-09-13 |
 | One server or two? | One front door: the app talks only to the Node API, which calls the Python AI service internally. Both run as one Compose unit. | 2026-09-13 |
 | Mock data in the frontend? | Removed. The app always uses the real API. | 2026-09-13 |

@@ -6,6 +6,7 @@
 import type { LatLon } from '../../../shared/types'
 import { config } from '../config'
 import { ApiError } from '../errors'
+import type { TtsVoice } from './voice'
 
 export interface AiRouteInfo {
   duration_s: number
@@ -121,7 +122,17 @@ export const aiClient = {
   },
 
   /** Returns mp3 bytes. */
-  synthesize(text: string, speaker: string, instruct: string): Promise<Buffer> {
-    return call<Buffer>('/tts', { text, language: 'English', speaker, instruct, bitrate: '128k' }, 'audio')
+  synthesize(text: string, voice: TtsVoice): Promise<Buffer> {
+    return call<Buffer>(
+      '/tts',
+      {
+        text,
+        language_code: voice.languageCode,
+        voice_name: voice.voiceName,
+        speaking_rate: voice.speakingRate,
+        pitch: voice.pitch,
+      },
+      'audio',
+    )
   },
 }

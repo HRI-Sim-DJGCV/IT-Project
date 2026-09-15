@@ -77,7 +77,15 @@ export const ScriptSchema = new Schema<GeneratedScript>(
     promptVersion: { type: Number, required: true },
     context: { type: String, required: true },
     voice: {
-      type: new Schema({ speaker: { type: String, required: true }, instruct: { type: String, required: true } }, { _id: false }),
+      type: new Schema(
+        {
+          voiceName: { type: String, required: true },
+          languageCode: { type: String, required: true },
+          speakingRate: { type: Number, required: true },
+          pitch: { type: Number, required: true },
+        },
+        { _id: false },
+      ),
       required: true,
     },
     segments: { type: [SegmentSchema], required: true },

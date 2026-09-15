@@ -1,18 +1,8 @@
 FROM python:3.13-slim
 
-# System dependencies:
-# - build-essential: numba/llvmlite may build from source
-# - libsndfile1: soundfile
-# - ffmpeg: wav -> mp3 conversion
-# - sox, libgomp1: audio tooling and the OpenMP runtime torch/numba need
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libsndfile1 \
-    ffmpeg \
-    sox \
-    libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

@@ -82,10 +82,11 @@ class ScriptGenerateResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000)
-    language: str = "English"  # or "Auto"
-    speaker: str = "Ryan"
-    instruct: str = ""
-    bitrate: str = "128k"
+    language_code: str = "en-US"
+    voice_name: str = "en-US-Neural2-D"
+    # Google has no freeform style instruction; pace/tone is approximated with rate + pitch.
+    speaking_rate: float = Field(0.85, ge=0.25, le=2.0)
+    pitch: float = Field(-2.0, ge=-20.0, le=20.0)
 
 
 # ---------------------------------------------------------------------------
