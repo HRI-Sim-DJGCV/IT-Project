@@ -20,7 +20,7 @@ frontend ──HTTPS + JWT──▶ backend (Node, :8000) ──HTTP + X-Interna
 | Auth | Short-lived **JWT** (access token) in an `Authorization: Bearer` header | Stateless, works across Vercel (frontend) and a separate API host |
 | Passwords | `bcryptjs`, cost 10 | Standard |
 | Shared code | `shared/types.ts`, `shared/survey.ts`, `shared/scoring.ts` | One definition of the wire types, the survey items and the calm-score rule |
-| AI service | FastAPI in `server/`, called through `backend/src/services/aiClient.ts` | Routes (Google Routes + Places), scripts (OpenAI), audio (Qwen3-TTS). Internal only |
+| AI service | FastAPI in `server/`, called through `backend/src/services/aiClient.ts` | Routes (Google Routes + Places), scripts (OpenAI), audio (Google Cloud Text-to-Speech). Internal only |
 | Audio storage | mp3 files under `AUDIO_DIR/<preparationId>/<index>.mp3`, streamed by the API | Simple, no extra service; a Docker volume in Compose |
 | Hosting | One host running `docker compose up api ai` | The AI service must not be publicly reachable |
 | Database | MongoDB Atlas, database `walkingapp` | The team's existing cluster |
@@ -91,7 +91,7 @@ An address Google cannot find comes back as `400 VALIDATION_ERROR` with the Plac
 Participant only. Body `{ plan, route }` (the chosen `RouteOption`, echoed back unchanged). Creates a **walk preparation** and starts generating in the background:
 
 1. `generating_script`: the AI service writes a meditation for this walk (route, weather, elevation, park or not, time budget). The text is split into three sections (focused attention → compassion → closing, 20/40/40 of the walk) and then into short spoken segments, each given an `atSecond`.
-2. `generating_audio`: one mp3 per segment from the AI service, using the **voice of the participant's condition** (`voice`/`age` → speaker + a soothing delivery instruction, see `backend/src/services/voice.ts`). `progress.done/total` counts files.
+2. `generating_audio`: one mp3 per segment from the AI service, using the **voice of the participant's condition** (`voice`/`age` → a Google Cloud TTS voice name, speaking rate and pitch, see `backend/src/services/voice.ts`). `progress.done/total` counts files.
 3. `ready` or `failed` (with `error`).
 
 Response `202`: `{ preparation: WalkPreparation }` with `status: "pending"`. Poll:
@@ -150,7 +150,7 @@ Admin-defined experimental arms. **A condition changes only the voice.** There i
 { "_id": "A", "name": "Condition A", "voice": "Male", "age": 30, "updatedAt": "...", "updatedBy": "researcher01" }
 ```
 
-`voice` is `Male | Female | Neutral` or a Qwen3-TTS speaker name; `age` shapes the delivery instruction.
+`voice` is `Male | Female | Neutral` or a Google Cloud TTS voice name (e.g. `en-US-Neural2-J`); `age` shapes the speaking rate and pitch.
 
 ### `walkPreparations`
 
@@ -176,7 +176,7 @@ One document per completed walk. Surveys, plan, route and **the generated script
   "script": {
     "generator": "ai", "model": "gpt-4.1-mini", "promptVersion": 1,
     "context": "A 30-minute walking meditation for stress regulation …",
-    "voice": { "speaker": "Ryan", "instruct": "Speak as a young meditation guide. Very slow, soft and calm. …" },
+    "voice": { "voiceName": "en-US-Neural2-D", "languageCode": "en-US", "speakingRate": 0.9, "pitch": 0 },
     "segments": [ { "atSecond": 0, "section": "focused_attention", "title": "Focused attention 1/3", "text": "...", "audioIndex": 0 }, … ],
     "rawText": "[FOCUSED_ATTENTION]\n…"
   },
@@ -217,14 +217,14 @@ Require `role ∈ { medical_professional, researcher }`; a participant token get
 
 | Method & path | Body → response |
 |---|---|
-| `GET /health` | `{ status, tts: ready \| loading \| disabled \| unavailable }` |
+| `GET /health` | `{ status, tts: ready \| disabled \| unavailable }` |
 | `POST /route/generate-from-text` | `{ start_location, start_coordinates?, end_location, total_travel_time (s), park_polylines }` → `{ origin, destination, baseline: { duration_s, distance_m, polyline }, parks: [{ park, added_s, slack_s, route? }] }` |
 | `POST /script/generate` | `{ source, destination, total_walking_time, context, park?, park_timing? }` → `{ script, model, prompt_version }` |
-| `POST /tts` | `{ text, language, speaker, instruct, bitrate }` → `audio/mpeg` bytes |
+| `POST /tts` | `{ text, language_code, voice_name, speaking_rate, pitch }` → `audio/mpeg` bytes (Google Cloud Text-to-Speech) |
 
 ## 7. Open points
 
-- **Generation time.** On CPU the TTS step can take several minutes for a 45-minute walk. A GPU host makes it seconds. Decide the hosting before the trial starts; the Prepare screen tolerates either but participants will wait.
+- **Cloud TTS quota.** The Neural2 free tier is 1 million characters/month; a full trial's worth of 30-45 minute walks could approach that. Watch usage in Google Cloud Console and budget-alert before the trial starts.
 - **Audio retention.** mp3 files are kept per preparation. Decide whether audio is research data (keep with backups) or disposable (purge after N days; the walk keeps the text either way).
 - **Weather and elevation** enrich the prompt when the Google Weather / Elevation APIs are enabled on the key; they degrade gracefully to "unknown" otherwise.
 - **Backups / data retention** for a research dataset: Atlas snapshots are probably sufficient, confirm with the research lead.

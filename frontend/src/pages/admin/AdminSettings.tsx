@@ -63,7 +63,7 @@ export function AdminSettings() {
       <h2 className="text-lg font-bold text-ink">Conditions</h2>
       <p className="-mt-3 text-sm text-muted">
         Every walk's meditation is written by AI for that walk. A condition sets the voice that reads it (Male, Female,
-        Neutral, or a speaker name) and the apparent age of the guide. Changes apply to new walks only.
+        Neutral, or a Google voice name) and the apparent age of the guide. Changes apply to new walks only.
       </p>
 
       {error ? <ErrorText>{error}</ErrorText> : null}

@@ -1,9 +1,8 @@
 # Overlay that swaps the stub for the real Python AI service.
-# Needs server/.env with GOOGLE_MAPS_API_KEY and OPENAI_API_KEY.
+# Needs server/.env with GOOGLE_MAPS_API_KEY and OPENAI_API_KEY (text-to-speech uses the
+# Google Cloud Text-to-Speech API on the same key, or GOOGLE_TTS_API_KEY if set).
 #
 #   docker compose -f docker-compose.yml -f docker-compose.real.yml --profile real up --build
-#
-# First start downloads the ~1.2 GB voice model into the hf-cache volume.
 
 services:
   api:

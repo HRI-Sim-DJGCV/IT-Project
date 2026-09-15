@@ -15,9 +15,3 @@ class OverpassError(Exception):
 
 class OpenaiAPIError(Exception):
     """Raised when Open Street Maps APIs return an error or unexpected payload."""
-
-class TTSNotReadyError(RuntimeError):
-    """Raised when the TTS model is not loaded / available."""
-
-class AudioConversionError(RuntimeError):
-    """Raised when There is an error in audio conversion"""

@@ -2,14 +2,9 @@ from __future__ import annotations
 import re
 import math
 import polyline as poly_decoder
-import subprocess
-from pathlib import Path
 from typing import Dict, Any
 
-from route.errors import GoogleRoutesError, AudioConversionError
-
-import subprocess
-from pathlib import Path
+from route.errors import GoogleRoutesError
 
 
 _DURATION_RE = re.compile(r"^(\d+)s$")
@@ -46,28 +41,6 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return r * c
 
-def _ensure_ffmpeg():
-    try:
-        subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True)
-    except Exception as e:
-        raise RuntimeError("ffmpeg is not installed or not on PATH") from e
-
-
-# def _wav_to_mp3(wav_path: Path, mp3_path: Path, bitrate: str) -> None:
-#     subprocess.run(
-#         [
-#             "ffmpeg", "-y",
-#             "-i", str(wav_path),
-#             "-codec:a", "libmp3lame",
-#             "-b:a", bitrate,
-#             str(mp3_path),
-#         ],
-#         check=True,
-#         stdout=subprocess.DEVNULL,
-#         stderr=subprocess.DEVNULL,
-#     )
-
-    
 def classify_step(elev_gain_m: float, elev_start_m: float, elev_end_m: float) -> str:
     """
     Replace with your own semantics.
@@ -80,40 +53,3 @@ def classify_step(elev_gain_m: float, elev_start_m: float, elev_end_m: float) ->
     return "low elevation (mostly flat)"
 
 
-def wav_to_mp3(wav_path: Path, mp3_path: Path, bitrate: str = "192k") -> None:
-    """
-    Convert a WAV file to MP3 using ffmpeg.
-
-    Requirements:
-      - ffmpeg installed and available in PATH
-
-    Args:
-      wav_path: input .wav path
-      mp3_path: output .mp3 path
-      bitrate: e.g. "128k", "192k"
-    """
-    if not wav_path.exists():
-        raise AudioConversionError(f"WAV file not found: {wav_path}")
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-i",
-        str(wav_path),
-        "-codec:a",
-        "libmp3lame",
-        "-b:a",
-        str(bitrate),
-        str(mp3_path),
-    ]
-
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        err = (proc.stderr or "").strip()
-        raise AudioConversionError(f"ffmpeg failed: {err}")
-
-    if not mp3_path.exists():
-        raise AudioConversionError("ffmpeg succeeded but MP3 file missing")

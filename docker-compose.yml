@@ -95,10 +95,7 @@ services:
       PORT: "8001"
     expose:
       - "8001"
-    volumes:
-      - hf-cache:/root/.cache/huggingface
 
 volumes:
   mongo:
   audio:
-  hf-cache:

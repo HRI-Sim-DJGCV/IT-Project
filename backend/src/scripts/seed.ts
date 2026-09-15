@@ -65,7 +65,7 @@ function sampleScript(durationMinutes: number): GeneratedScript {
     model: 'seed-sample',
     promptVersion: 0,
     context: 'Seed data: sample walk for the demo history.',
-    voice: { speaker: 'Ryan', instruct: 'seed' },
+    voice: { voiceName: 'en-US-Neural2-D', languageCode: 'en-US', speakingRate: 0.85, pitch: -2 },
     segments: buildSegments(SAMPLE_RAW, durationMinutes).map((s) => ({ ...s, audioIndex: null })),
     rawText: SAMPLE_RAW,
   }

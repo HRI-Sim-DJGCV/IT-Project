@@ -33,6 +33,18 @@ def openai_api_key()->str:
     return key
 
 
+def google_tts_api_key() -> str:
+    # Falls back to GOOGLE_MAPS_API_KEY so one key covers both if Cloud Text-to-Speech
+    # API is enabled on the same Google Cloud project; set GOOGLE_TTS_API_KEY to use a
+    # different key/project instead.
+    key = os.getenv("GOOGLE_TTS_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
+    if not key:
+        from .errors import GoogleAPIError
+
+        raise GoogleAPIError("Missing env var GOOGLE_TTS_API_KEY (or GOOGLE_MAPS_API_KEY)")
+    return key
+
+
 def load_template(path: str) -> str:
     try:
         return Path(path).read_text(encoding="utf-8")

@@ -7,24 +7,22 @@ Node API cannot do itself:
 
   POST /route/generate-from-text   real walking routes (Google Routes + Places)
   POST /script/generate            an AI-written meditation script for one walk
-  POST /tts                        spoken audio for one script segment (Qwen3-TTS)
+  POST /tts                        spoken audio for one script segment (Google Cloud TTS)
 
 Run:  uvicorn main:app --host 0.0.0.0 --port 8001
 """
 from __future__ import annotations
 
-import asyncio
 import os
-import warnings
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from route.config import google_maps_api_key
-from route.errors import OpenaiAPIError
+from route.config import google_maps_api_key, google_tts_api_key
+from route.errors import GoogleAPIError, OpenaiAPIError
 from route.models import (
     LatLng,
     ScriptGenerateRequest,
@@ -41,48 +39,26 @@ from route.services.generate_script import (
 )
 from route.services.get_route import generate_walk_route
 from route.services.text_to_speech import generate_tts_mp3
-from route.utils.utils import _ensure_ffmpeg
 
 INTERNAL_KEY = os.getenv("INTERNAL_KEY") or None
 TTS_ENABLED = os.getenv("TTS_ENABLED", "true").strip().lower() not in {"0", "false", "no"}
-TTS_MODEL_ID = os.getenv("TTS_MODEL_ID", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice")
 PORT = int(os.getenv("PORT", "8001"))
 
-# Text-to-speech model handle; loaded once at startup when TTS_ENABLED.
-MODEL: Optional[Any] = None
-TTS_STATE = "disabled" if not TTS_ENABLED else "loading"
-TTS_SEMAPHORE = asyncio.Semaphore(1)
-
-
-def _load_tts_model() -> Any:
-    import torch  # heavy imports stay local so the service starts even without them when TTS is disabled
-    from qwen_tts import Qwen3TTSModel
-
-    use_cuda = torch.cuda.is_available()
-    return Qwen3TTSModel.from_pretrained(
-        TTS_MODEL_ID,
-        device_map="cuda:0" if use_cuda else "cpu",
-        dtype=torch.bfloat16 if use_cuda else torch.float32,
-    )
+TTS_STATE = "disabled"
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global MODEL, TTS_STATE
-    warnings.filterwarnings("ignore", message=".*flash-attn.*")
+    global TTS_STATE
     if TTS_ENABLED:
         try:
-            _ensure_ffmpeg()
-            MODEL = await asyncio.to_thread(_load_tts_model)
+            google_tts_api_key()
             TTS_STATE = "ready"
-            print(f"[ai] TTS model {TTS_MODEL_ID} loaded")
-        except Exception as error:  # noqa: BLE001 - report and keep serving routes/scripts
+            print("[ai] Text-to-speech ready (Google Cloud TTS)")
+        except GoogleAPIError as error:
             TTS_STATE = "unavailable"
             print(f"[ai] TTS unavailable: {error}")
-    try:
-        yield
-    finally:
-        MODEL = None
+    yield
 
 
 def require_internal_key(x_internal_key: Optional[str] = Header(default=None)) -> None:
@@ -217,18 +193,15 @@ async def generate_script(payload: ScriptGenerateRequest):
 
 @api.post("/tts")
 async def text_to_speech(payload: TTSRequest):
-    if MODEL is None:
+    if TTS_STATE != "ready":
         raise HTTPException(status_code=503, detail=f"Text-to-speech is {TTS_STATE}")
     try:
         return await generate_tts_mp3(
-            model=MODEL,
-            semaphore=TTS_SEMAPHORE,
             text=payload.text,
-            language=payload.language,
-            speaker=payload.speaker,
-            instruct=payload.instruct,
-            bitrate=payload.bitrate,
-            offload_model_to_thread=True,
+            language_code=payload.language_code,
+            voice_name=payload.voice_name,
+            speaking_rate=payload.speaking_rate,
+            pitch=payload.pitch,
         )
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"TTS failed: {error}") from error
