@@ -1,98 +1,38 @@
+import { useHighContrast } from '../context/HighContrastContext'
 import { useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { alpha } from '@mui/material/styles'
-
-{/*
-This function creates a gradient background. 
-Use light mode for now. Dark mode NOT implemented
-*/}
-function GradientBackground() {
-  return (
-    <Box
-      sx={{
-        position: 'absolute',
-        inset: 0,
-        overflow: 'hidden',
-        bgcolor: (theme) =>
-          // remove ternary cond after dark mode implementation
-          theme.palette.mode === 'light'
-            ? '#EEF5FE'
-            : theme.palette.primary.dark,
-        zIndex: 0,
-        pointerEvents: 'none',
-      }}
-    >
-      {/* Layer 1 */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '36%',
-          left: '-25%',
-          width: '150%',
-          height: '80%',
-          borderRadius: '50% 50% 0 0 / 22% 22% 0 0',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? alpha(theme.palette.primary.dark, 0.35)
-              : '#DBECFC',
-        }}
-      />
-
-      {/* Layer 2 */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '49%',
-          left: '-30%',
-          width: '160%',
-          height: '70%',
-          borderRadius: '50% 50% 0 0 / 24% 24% 0 0',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? alpha(theme.palette.primary.main, 0.45)
-              : '#C5DEFA',
-        }}
-      />
-
-      {/* Layer 3 */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '63%',
-          left: '-20%',
-          width: '140%',
-          height: '60%',
-          borderRadius: '50% 50% 0 0 / 26% 26% 0 0',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? alpha(theme.palette.primary.light, 0.4)
-              : '#AFD1F6',
-        }}
-      />
-
-      {/* Layer 4 */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '78%',
-          left: '-15%',
-          width: '130%',
-          height: '50%',
-          borderRadius: '50% 50% 0 0 / 28% 28% 0 0',
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? alpha(theme.palette.primary.light, 0.55)
-              : '#91afd0',
-        }}
-      />
-    </Box>
-  )
-}
+import { WaveBackground } from '../components/WaveBackground'
+import logo from '../../asset/logo.png'
 
 export function Landing() {
   const navigate = useNavigate()
+  const { highContrast, toggleHighContrast } = useHighContrast()
+
+  const glassButtonStyle = {
+    height: 48,
+    borderRadius: '9999px',
+    textTransform: 'none',
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    letterSpacing: '0.01em',
+    border: highContrast
+      ? '2px solid #FFFF00'
+      : (theme: any) => `1px solid ${alpha(theme.palette.common.white, 0.5)}`,
+    color: highContrast ? '#FFFF00' : (theme: any) => theme.palette.common.white,
+    bgcolor: highContrast
+      ? '#000000'
+      : (theme: any) => alpha(theme.palette.common.white, 0.25),
+    backdropFilter: highContrast ? 'none' : 'blur(6px)',
+    '&:hover': {
+      border: highContrast ? '2px solid #FFFF00' : '1px solid #FFFFFF',
+      bgcolor: highContrast
+        ? '#111111'
+        : (theme: any) => alpha(theme.palette.common.white, 0.1),
+    },
+  }
 
   return (
     <Box
@@ -110,10 +50,12 @@ export function Landing() {
         py: 5,
         boxSizing: 'border-box',
         overflow: 'hidden',
+        bgcolor: highContrast ? '#000000' : 'transparent',
+        transition: 'background-color 0.2s ease',
       }}
     >
-      {/* Background */}
-      <GradientBackground />
+      {/* Component background - hidden during high contrast */}
+      {!highContrast && <WaveBackground />}
 
       <Box
         sx={{
@@ -133,23 +75,34 @@ export function Landing() {
             mb: 4,
             width: 100,
             height: 100,
-            borderRadius: '28px',
-            bgcolor: (theme) => alpha(theme.palette.common.white, 1),
-            backdropFilter: 'blur(12px)',
-            color: '#000000',
-            border: (theme) =>
-              theme.palette.mode === 'light'
-                ? `1px solid ${alpha(theme.palette.text.primary, 0.15)}`
-                : `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
+            borderRadius: '50%',
+            bgcolor: highContrast
+              ? '#000000'
+              : (theme) => alpha(theme.palette.common.white, 1),
+            backdropFilter: highContrast ? 'none' : 'blur(12px)',
+            border: highContrast
+              ? '2px solid #FFFF00'
+              : (theme) =>
+                  theme.palette.mode === 'light'
+                    ? `1px solid ${alpha(theme.palette.text.primary, 0.15)}`
+                    : `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+            boxShadow: highContrast ? 'none' : '0 8px 32px rgba(0, 0, 0, 0.15)',
+            overflow: 'hidden',
           }}
         >
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, letterSpacing: '0.01em' }}>
-            Logo
-          </Typography>
+          <Box
+            component="img"
+            src={logo}
+            alt="Walking Meditation Logo"
+            sx={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
         </Box>
 
         {/* Headline */}
@@ -160,15 +113,14 @@ export function Landing() {
             fontWeight: 600,
             lineHeight: 1.25,
             letterSpacing: '-0.02em',
-            color: (theme) =>
-              theme.palette.mode === 'light'
-                ? theme.palette.text.primary
-                : theme.palette.common.white,
+            color: highContrast
+              ? '#FFFF00'
+              : (theme) =>
+                  theme.palette.mode === 'light'
+                    ? theme.palette.text.primary
+                    : theme.palette.common.white,
             mb: 1.5,
-            textShadow: (theme) =>
-              theme.palette.mode === 'light'
-                ? 'none'
-                : '0 2px 8px rgba(0, 0, 0, 0.15)',
+            textShadow: highContrast ? 'none' : undefined,
           }}
         >
           Walking Meditation
@@ -180,10 +132,12 @@ export function Landing() {
           sx={{
             fontSize: '1rem',
             lineHeight: 1.5,
-            color: (theme) =>
-              theme.palette.mode === 'light'
-                ? theme.palette.text.secondary
-                : alpha(theme.palette.common.white, 0.85),
+            color: highContrast
+              ? '#FFFF00'
+              : (theme) =>
+                  theme.palette.mode === 'light'
+                    ? theme.palette.text.secondary
+                    : alpha(theme.palette.common.white, 0.85),
             maxWidth: 290,
           }}
         >
@@ -203,72 +157,41 @@ export function Landing() {
           pb: 2,
         }}
       >
-        {/* Button */}
+
+        {/* Log in Button */}
         <Button
-          variant="contained"
-          disableElevation
+          variant="outlined"
           onClick={() => navigate('/login')}
-          sx={{
-            height: 48,
-            borderRadius: '9999px',
-            textTransform: 'none',
-            fontSize: '0.9375rem',
-            fontWeight: 600,
-            letterSpacing: '0.01em',
-            bgcolor: (theme) => theme.palette.common.white,
-            color: (theme) => theme.palette.primary.dark,
-            '&:hover': {
-              bgcolor: (theme) => alpha(theme.palette.common.white, 0.92),
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
-            },
-          }}
+          sx={glassButtonStyle}
         >
           Log in
         </Button>
 
-        {/* Button */}
+        {/* Request Access Button */}
         <Button
           variant="outlined"
           onClick={() => navigate('/request-access')}
-          sx={{
-            height: 48,
-            borderRadius: '9999px',
-            textTransform: 'none',
-            fontSize: '0.9375rem',
-            fontWeight: 500,
-            letterSpacing: '0.01em',
-            borderColor: (theme) => alpha(theme.palette.common.white, 0.5),
-            color: (theme) => theme.palette.common.white,
-            bgcolor: (theme) => alpha(theme.palette.common.white, 0.25),
-            backdropFilter: 'blur(6px)',
-            '&:hover': {
-              borderColor: (theme) => theme.palette.common.white,
-              bgcolor: (theme) => alpha(theme.palette.common.white, 0.10),
-            },
-          }}
+          sx={glassButtonStyle}
         >
-          Request access
+          Request an access code
         </Button>
 
-        {/* Button */}
+        {/* Access Code Button */}
         <Button
-          variant="text"
+          variant="outlined"
           onClick={() => navigate('/access-code')}
-          sx={{
-            height: 40,
-            borderRadius: '9999px',
-            textTransform: 'none',
-            color: (theme) => theme.palette.common.white,
-            fontWeight: 600,
-            fontSize: '0.875rem',
-            letterSpacing: '0.01em',
-            mt: 0.5,
-            '&:hover': {
-              bgcolor: (theme) => alpha(theme.palette.common.white, 0.1),
-            },
-          }}
+          sx={glassButtonStyle}
         >
-          Received an access code?
+          Have an access code
+        </Button>
+
+        {/* High Contrast Mode Toggle */}
+        <Button
+          variant="outlined"
+          onClick={toggleHighContrast}
+          sx={glassButtonStyle}
+        >
+          {highContrast ? 'Disable High Contrast' : 'Enable High Contrast'}
         </Button>
       </Box>
     </Box>
