@@ -127,6 +127,19 @@ Set `TTS_ENABLED=false` in `server/.env` to skip the voice model while working o
 4. **Walk**: segments play at their scheduled second, queued so they never overlap.
 5. **Post-survey** → `POST /me/walks` stores the walk with the exact script that was read.
 
+## Tests and CI
+
+Every pull request and every push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml): the API is typechecked, tested and compiled; the web app is linted, tested and built; the Python service gets a syntax check; and the two Docker images are built (not pushed) so the quick start cannot silently break.
+
+Run the same checks locally:
+
+```bash
+cd backend && npm run typecheck && npm test      # vitest + supertest, no database needed
+cd frontend && npm run lint && npm test && npm run build
+```
+
+`npm run test:watch` in either folder re-runs on save. Backend tests live in `backend/test/` (scoring rule, request validation, polyline decoding, script segmenting, the HTTP error and auth behaviour of the app); frontend tests sit next to the code as `*.test.ts(x)` (the survey form and the API client).
+
 ## Deploying
 
 - **Frontend**: Vercel, Root Directory `frontend`, env `VITE_API_BASE_URL=https://<api-host>/v1`. `frontend/vercel.json` handles SPA routes.
