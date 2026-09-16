@@ -1,0 +1,81 @@
+# Posts a message to a Discord channel whenever a pull request is opened
+# (also on reopen, and when a draft is marked ready for review).
+#
+# Setup: create a channel webhook in Discord
+#   Channel -> Edit Channel -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL
+# then add it to this repo as a secret named DISCORD_WEBHOOK
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#
+# The webhook URL is the only credential Discord needs, so keep it in the
+# secret: anyone holding it can post to the channel.
+name: PR Discord notification
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Post to Discord
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      # The PR title, body and branch names are user-controlled, so they are
+      # passed through the environment and quoted by jq rather than
+      # interpolated into the shell or the JSON by hand.
+      - name: Send webhook
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK:-}" ]; then
+            echo "DISCORD_WEBHOOK secret is not set - skipping." >&2
+            exit 0
+          fi
+
+          # Discord embed descriptions cap at 4096 characters; keep it shorter
+          # than that so the message stays readable in the channel.
+          description=$(printf '%s' "${PR_BODY:-}" | head -c 400)
+          if [ -z "$description" ]; then
+            description="_No description provided._"
+          fi
+
+          payload=$(jq -n \
+            --arg title "#${PR_NUMBER}: ${PR_TITLE}" \
+            --arg url "$PR_URL" \
+            --arg description "$description" \
+            --arg author "$PR_AUTHOR" \
+            --arg branches "\`${PR_HEAD}\` -> \`${PR_BASE}\`" \
+            --arg repo "$REPO" \
+            '{
+              username: "PR Bot",
+              content: "New pull request in \($repo)",
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $description,
+                color: 5814783,
+                fields: [
+                  { name: "Author",   value: $author,   inline: true },
+                  { name: "Branches", value: $branches, inline: true }
+                ]
+              }]
+            }')
+
+          curl --silent --show-error --fail \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK"
