@@ -11,6 +11,7 @@ export default defineConfig({
       JWT_SECRET: 'test-only-secret-that-is-at-least-32-characters-long',
       NODE_ENV: 'test',
       CORS_ORIGINS: 'http://localhost:5173',
+      GOOGLE_MAPS_API_KEY: 'test-google-key',
     },
   },
 })
