@@ -25,7 +25,7 @@ Wait for `api ... listening on http://localhost:8000/v1` in the logs (the first 
 
 This starts a local MongoDB (seeded with the logins above), the API, the web app, and a **stub AI service** that returns a fixed script and silent audio. Every screen works, including the full walk flow; you just won't hear a voice. Walks saved this way are marked `stub-model` in the database.
 
-Route generation calls Google Maps from the Node API, so it needs keys: copy `.env.example` to `.env` at the repo root, fill in `GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY`, and compose picks them up on the next `up --build`. Without them the app runs but generating a route shows an error.
+Route generation calls Google Maps from the Node API, so it needs keys: copy `.env.example` to `.env` at the repo root, fill in `GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY`, and compose picks them up on the next `up --build`. Enable Geocoding API, Routes API, and Places API (New) for the server-side key. Without them the app runs but generating a route shows an error.
 
 ```bash
 docker compose down        # stop
