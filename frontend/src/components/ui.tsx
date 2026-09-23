@@ -48,8 +48,7 @@ export function Screen({ title, back, children, footer, right }: ScreenProps) {
           elevation={0}
           position="sticky"
           sx={{
-            backdropFilter: 'blur(8px)',
-            bgcolor: 'rgba(245, 245, 247, 0.95)',
+            bgcolor: 'background.default',
             borderBottom: 1,
             borderColor: 'divider',
           }}
@@ -122,8 +121,7 @@ export function Screen({ title, back, children, footer, right }: ScreenProps) {
           elevation={0}
           square
           sx={{
-            backdropFilter: 'blur(8px)',
-            bgcolor: 'rgba(245, 245, 247, 0.95)',
+            bgcolor: 'background.default',
             borderTop: 1,
             borderColor: 'divider',
             paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',

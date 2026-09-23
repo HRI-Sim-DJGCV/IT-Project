@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode, useLayoutEffect } from 'react'
 
 interface HighContrastContextType {
   highContrast: boolean
@@ -13,12 +13,13 @@ export function HighContrastProvider({ children }: { children: ReactNode }) {
   })
 
   const toggleHighContrast = () => {
-    setHighContrast((prev) => {
-      const next = !prev
-      localStorage.setItem('highContrast', String(next))
-      return next
-    })
+  setHighContrast((prev) => !prev)
   }
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.contrast = highContrast ? 'high' : 'normal'
+    localStorage.setItem('highContrast', String(highContrast))
+  }, [highContrast])
 
   return (
     <HighContrastContext.Provider value={{ highContrast, toggleHighContrast }}>
