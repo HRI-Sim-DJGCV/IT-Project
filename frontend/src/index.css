@@ -12,6 +12,17 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+:root[data-contrast='high'] {
+  --color-primary: #ffff00;
+  --color-primary-hover: #ffff66;
+  --color-surface: #000000;
+  --color-card: #000000;
+  --color-ink: #ffff00;
+  --color-muted: #ffff00;
+  --color-line: #ffff00;
+  --color-accent: #111111;
+}
+
 html,
 body,
 #root {
