@@ -18,6 +18,11 @@ export interface ComputedRoute {
   detail?: string
 }
 
+export interface NearbyPark {
+  name: string
+  location: LngLat
+}
+
 interface GoogleGeocodeResponse {
   status?: string
   error_message?: string
@@ -35,8 +40,81 @@ interface GoogleRoutesResponse {
   error?: { message?: string }
 }
 
+interface GooglePlacesResponse {
+  places?: Array<{
+    displayName?: { text?: string }
+    location?: { latitude?: number; longitude?: number }
+  }>
+  error?: { message?: string }
+}
+
 const GOOGLE_ROUTES_URL =
   'https://routes.googleapis.com/directions/v2:computeRoutes'
+const GOOGLE_PLACES_NEARBY_URL =
+  'https://places.googleapis.com/v1/places:searchNearby'
+
+export async function searchNearbyParks(
+  centre: LngLat,
+  radiusMetres: number,
+): Promise<NearbyPark[]> {
+  const [longitude, latitude] = centre
+  const response = await fetch(GOOGLE_PLACES_NEARBY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': mapsKey(),
+      'X-Goog-FieldMask': 'places.displayName,places.location',
+    },
+    body: JSON.stringify({
+      includedTypes: [
+        'park',
+        'city_park',
+        'national_park',
+        'state_park',
+        'garden',
+        'botanical_garden',
+        'hiking_area',
+        'picnic_ground',
+      ],
+      maxResultCount: 20,
+      rankPreference: 'DISTANCE',
+      languageCode: 'en-AU',
+      regionCode: 'AU',
+      locationRestriction: {
+        circle: {
+          center: { latitude, longitude },
+          radius: Math.min(50_000, Math.max(1, radiusMetres)),
+        },
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    console.error('[Google Places nearby parks]', response.status, details)
+    throw new Error(`Google Places failed with status ${response.status}.`)
+  }
+
+  const data = (await response.json()) as GooglePlacesResponse
+  if (data.error?.message) throw new Error(data.error.message)
+
+  return (data.places ?? []).flatMap((place) => {
+    const placeLatitude = place.location?.latitude
+    const placeLongitude = place.location?.longitude
+    if (
+      typeof placeLatitude !== 'number' ||
+      typeof placeLongitude !== 'number' ||
+      !Number.isFinite(placeLatitude) ||
+      !Number.isFinite(placeLongitude)
+    ) {
+      return []
+    }
+    return [{
+      name: place.displayName?.text?.trim() || 'a nearby park',
+      location: [placeLongitude, placeLatitude] as LngLat,
+    }]
+  })
+}
 
 export async function geocodeLocation(
   location: string,
