@@ -131,3 +131,75 @@ export function createAdminParticipant(conditionId: string): Promise<CreateParti
 export function getAdminExportCsv(): Promise<Blob> {
   return apiBlob('/admin/export.csv')
 }
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+export interface WeeklyReportData {
+  _id: string
+  week: string
+  totalParticipants: number
+  activeParticipants: number
+  totalWalks: number
+  completedWalks: number
+  completionRate: number
+  averageCalmScore: number
+  averageWalkDuration: number
+  topRouteType: string | null
+  topCondition: string | null
+  participantBreakdown: {
+    onceOrMore: number
+    threeOrMore: number
+    fiveOrMore: number
+  }
+  conditionPerformance: Record<string, any>
+  routeTypePerformance: Record<string, any>
+  createdAt: string
+}
+
+export interface ParticipantMetricsData {
+  _id: string
+  participantId: string
+  weekStart: string
+  totalWalks: number
+  completedWalks: number
+  averageCalmScore: number
+  averageWalkDuration: number
+  preferredCondition: string | null
+  conditionPreferences: Record<string, number>
+  routeTypePreferences: Record<string, number>
+  createdAt: string
+  updatedAt: string
+}
+
+/** GET /admin/analytics/dashboard: current week summary */
+export async function getAnalyticsDashboard(): Promise<{ report: WeeklyReportData | null; message?: string }> {
+  return api('/admin/analytics/dashboard')
+}
+
+/** GET /admin/analytics/reports: paginated list of weekly reports */
+export async function getAnalyticsReports(page = 1, limit = 10): Promise<{ reports: WeeklyReportData[]; pagination: any }> {
+  return api(`/admin/analytics/reports?page=${page}&limit=${limit}`)
+}
+
+/** GET /admin/analytics/reports/:week: specific week's report */
+export async function getAnalyticsReport(week: string): Promise<{ report: WeeklyReportData }> {
+  return api(`/admin/analytics/reports/${encodeURIComponent(week)}`)
+}
+
+/** GET /admin/analytics/participants/:participantId: per-participant metrics */
+export async function getAnalyticsParticipant(participantId: string, weeks = 12): Promise<{ participantId: string; metrics: ParticipantMetricsData[] }> {
+  return api(`/admin/analytics/participants/${encodeURIComponent(participantId)}?weeks=${weeks}`)
+}
+
+/** POST /admin/analytics/generate: manually trigger analytics generation */
+export async function generateAnalytics(week?: string): Promise<{ success: boolean; data: any }> {
+  const body = week ? { week } : {}
+  return api('/admin/analytics/generate', { method: 'POST', body })
+}
+
+/** GET /admin/analytics/summary: all-time aggregate stats */
+export async function getAnalyticsSummary(): Promise<{ reports: any; metrics: any }> {
+  return api('/admin/analytics/summary')
+}

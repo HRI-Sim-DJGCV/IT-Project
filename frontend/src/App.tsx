@@ -14,6 +14,7 @@ import { PreSurvey } from './pages/walk/PreSurvey'
 import { Prepare } from './pages/walk/Prepare'
 import { Progress } from './pages/walk/Progress'
 import { SelectRoute } from './pages/walk/SelectRoute'
+import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
 import { AdminParticipants } from './pages/admin/AdminParticipants'
 import { AdminSettings } from './pages/admin/AdminSettings'
@@ -84,6 +85,7 @@ export default function App() {
             <Route element={<RequireAdmin />}>
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/participants" element={<AdminParticipants />} />
+              <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/settings" element={<AdminSettings />} />
             </Route>
 

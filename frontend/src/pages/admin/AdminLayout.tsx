@@ -6,6 +6,7 @@ import { useSession } from '../../context/SessionContext'
 const TABS = [
   { label: 'Dashboard', path: '/admin' },
   { label: 'Participants', path: '/admin/participants' },
+  { label: 'Analytics', path: '/admin/analytics' },
   { label: 'Settings', path: '/admin/settings' },
 ]
 
@@ -33,7 +34,7 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
     >
       <nav
         aria-label="Admin sections"
-        className="grid grid-cols-3 overflow-hidden rounded-lg border border-primary text-sm font-medium"
+        className="grid grid-cols-4 overflow-hidden rounded-lg border border-primary text-sm font-medium"
       >
         {TABS.map((tab, i) => {
           const active = pathname === tab.path
@@ -43,9 +44,9 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
               type="button"
               aria-current={active ? 'page' : undefined}
               onClick={() => navigate(tab.path)}
-              className={`py-2 text-center transition ${i === 1 ? 'border-x border-primary' : ''} ${
-                active ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'
-              }`}
+              className={`py-2 text-center transition ${
+                i > 0 && i < TABS.length - 1 ? 'border-x border-primary' : i === 1 ? 'border-r border-primary' : i === 2 ? 'border-l border-primary' : ''
+              } ${active ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'}`}
             >
               {tab.label}
             </button>
