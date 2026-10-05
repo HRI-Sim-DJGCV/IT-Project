@@ -38,15 +38,16 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
       >
         {TABS.map((tab, i) => {
           const active = pathname === tab.path
+          const isNotLast = i < TABS.length - 1
           return (
             <button
               key={tab.path}
               type="button"
               aria-current={active ? 'page' : undefined}
               onClick={() => navigate(tab.path)}
-              className={`py-2 text-center transition ${
-                i > 0 && i < TABS.length - 1 ? 'border-x border-primary' : i === 1 ? 'border-r border-primary' : i === 2 ? 'border-l border-primary' : ''
-              } ${active ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'}`}
+              className={`py-2 text-center transition ${isNotLast ? 'border-r border-primary' : ''} ${
+                active ? 'bg-accent/60 font-semibold text-primary' : 'bg-card text-ink'
+              }`}
             >
               {tab.label}
             </button>

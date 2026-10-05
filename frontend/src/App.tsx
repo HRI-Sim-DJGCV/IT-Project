@@ -18,7 +18,6 @@ import { AdminAnalytics } from './pages/admin/AdminAnalytics'
 import { AdminDashboard } from './pages/admin/AdminDashboard'
 import { AdminParticipants } from './pages/admin/AdminParticipants'
 import { AdminSettings } from './pages/admin/AdminSettings'
-import { HighContrastProvider } from './context/HighContrastContext'
 
 function Restoring() {
   return (
@@ -58,7 +57,6 @@ function RootRoute() {
 
 export default function App() {
   return (
-    <HighContrastProvider>
       <SessionProvider>
         <BrowserRouter>
           <Routes>
@@ -93,6 +91,5 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </SessionProvider>
-    </HighContrastProvider>
   )
 }
