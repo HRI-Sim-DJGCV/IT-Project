@@ -2,13 +2,16 @@ import { forwardRef } from 'react'
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  Alert,
+  AppBar,
   Box,
   Button as MuiButton,
   Card as MuiCard,
-  Typography,
+  IconButton,
+  Paper,
   TextField,
-  Alert,
-  IconButton
+  Toolbar,
+  Typography,
 } from '@mui/material'
 
 // ---------------------------------------------------------------------------
@@ -25,42 +28,115 @@ interface ScreenProps {
 
 export function Screen({ title, back, children, footer, right }: ScreenProps) {
   const navigate = useNavigate()
+
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-surface">
+    <Box
+      sx={{
+        bgcolor: 'background.default',
+        display: 'flex',
+        flexDirection: 'column',
+        marginInline: 'auto',
+        maxWidth: 430,
+        minHeight: '100dvh',
+        width: '100%',
+      }}
+    >
       {(title || back || right) && (
-        <header
-          className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur"
-          style={{ paddingTop: 'max(env(safe-area-inset-top), var(--safe-top, 12px))', paddingBottom: 12 }}
+        <AppBar
+          color="transparent"
+          component="header"
+          elevation={0}
+          position="sticky"
+          sx={{
+            bgcolor: 'background.default',
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
         >
-          {back ? (
-            <IconButton
-              aria-label="Back"
-              onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
-              sx={{ ml: -1, color: 'primary.main' }}
+          <Toolbar
+            disableGutters
+            sx={{
+              gap: 1,
+              minHeight: 'auto',
+              paddingBottom: 1.5,
+              paddingInline: 2,
+              paddingTop: 'max(env(safe-area-inset-top), var(--safe-top, 12px))',
+            }}
+          >
+            {back ? (
+              <IconButton
+                aria-label="Back"
+                color="primary"
+                onClick={() =>
+                  typeof back === 'string' ? navigate(back) : navigate(-1)
+                }
+                sx={{ marginLeft: -1 }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </IconButton>
+            ) : null}
+
+            <Typography
+              component="h1"
+              noWrap
+              sx={{ flex: 1, fontWeight: 600, minWidth: 0 }}
+              variant="h6"
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </IconButton>
-          ) : null}
-          <Typography variant="h6" className="flex-1 truncate text-ink" sx={{ fontWeight: 600 }}>
-            {title}
-          </Typography>
-          {right}
-        </header>
+              {title}
+            </Typography>
+
+            {right}
+          </Toolbar>
+        </AppBar>
       )}
-      <main className="flex flex-1 flex-col gap-5 px-4 py-5">{children}</main>
+
+      <Box
+        component="main"
+        sx={{
+          display: 'flex',
+          flex: 1,
+          flexDirection: 'column',
+          gap: 2.5,
+          px: 2,
+          py: 2.5,
+        }}
+      >
+        {children}
+      </Box>
+
       {footer ? (
-        <footer
-          className="sticky bottom-0 border-t border-line bg-surface/95 px-4 pt-3 backdrop-blur"
-          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+        <Paper
+          component="footer"
+          elevation={0}
+          square
+          sx={{
+            bgcolor: 'background.default',
+            borderTop: 1,
+            borderColor: 'divider',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
+            paddingInline: 2,
+            paddingTop: 1.5,
+            position: 'sticky',
+            bottom: 0,
+          }}
         >
           {footer}
-        </footer>
+        </Paper>
       ) : (
-        <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+        <Box sx={{ height: 'env(safe-area-inset-bottom)' }} />
       )}
-    </div>
+    </Box>
   )
 }
 

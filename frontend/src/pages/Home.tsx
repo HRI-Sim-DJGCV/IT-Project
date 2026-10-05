@@ -1,43 +1,129 @@
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, Screen } from '../components/ui'
+import { Screen } from '../components/ui'
 import { useSession } from '../context/SessionContext'
+import { useHighContrast } from '../context/HighContrastContext'
+import { Button, Card, CardContent, Stack, Typography } from '@mui/material'
 
 export function Home() {
   const navigate = useNavigate()
   const { participant, startDraft, signOut } = useSession()
+  const { highContrast } = useHighContrast()
+
+  // button styling
+  const sharedButtonSx = {
+    height: 48,
+    borderRadius: '9999px',
+    textTransform: 'none',
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    letterSpacing: '0.01em',
+  }
+  
+  const outlinedButtonSx = {
+    ...sharedButtonSx,
+    bgcolor: highContrast ? '#000000' : 'transparent',
+    color: highContrast ? '#FFFF00' : 'var(--color-primary, #1e2a44)',
+    border: highContrast ? '2px solid #FFFF00' : '1px solid var(--color-line, #e2e4e9)',
+    '&:hover': {
+      bgcolor: highContrast ? '#111111' : 'rgba(30, 42, 68, 0.04)',
+      border: highContrast ? '2px solid #FFFF00' : '1px solid var(--color-primary, #1e2a44)',
+    },
+  }
 
   function begin() {
+    // save record
     startDraft()
     navigate('/walk/pre-survey')
+  }
+
+  // log out function
+  function handleLogout() {
+    signOut()
+    navigate('/', { replace: true })
   }
 
   return (
     <Screen
       title="Walking Meditation"
       right={
-        <button type="button" onClick={() => { signOut(); navigate('/', { replace: true }) }} className="text-sm text-muted">
+        <Button
+          variant="outlined"
+          sx={outlinedButtonSx}
+          onClick={handleLogout}
+        >
           Log out
-        </button>
+        </Button>
       }
     >
-      <div>
-        <h2 className="text-2xl font-semibold">Welcome back</h2>
-        <p className="text-sm text-muted">{participant?.displayName}</p>
-      </div>
+      <Stack spacing={3}>
+        <Stack spacing={0.5}>
+          <Typography component="h2" sx={{ fontWeight: 600 }} variant="h5">
+            Welcome back
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            {participant?.displayName}
+          </Typography>
+        </Stack>
 
-      <Card className="flex flex-col gap-3 bg-accent/40">
-        <p className="text-sm">Ready for a guided walk? It takes 15–45 minutes and starts with a short check-in.</p>
-        <Button onClick={begin}>Start walk</Button>
-      </Card>
+        <Card
+          component="section"
+          sx={{
+            bgcolor: 'secondary.main',
+            color: 'secondary.contrastText',
+            borderRadius: 3,
+          }}
+        >
+          <CardContent>
+            <Stack spacing={2}>
+              <Typography variant="body2">
+                Ready for a guided walk? It takes 15–45 minutes and starts
+                with a short check-in.
+              </Typography>
 
-      <div className="flex flex-col gap-2">
-        <Button variant="secondary" onClick={() => navigate('/history')}>
-          Activity history
-        </Button>
-        <Button variant="secondary" onClick={() => navigate('/account')}>
-          Account details
-        </Button>
-      </div>
+              <Button
+                color="primary"
+                fullWidth
+                onClick={begin}
+                variant="contained"
+                sx={{
+                  ...sharedButtonSx,
+                  boxShadow: 'none',
+                  bgcolor: highContrast ? '#000000' : 'var(--color-primary, #1e2a44)',
+                  color: highContrast ? '#FFFF00' : '#ffffff',
+                  border: highContrast ? '2px solid #FFFF00' : 'none',
+                  '&:hover': {
+                    bgcolor: highContrast ? '#111111' : 'var(--color-primary-hover, #2b3a5c)',
+                    border: highContrast ? '2px solid #FFFF00' : 'none',
+                    boxShadow: 'none',
+                  },
+                }}
+              >
+                Start walk
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        <Stack spacing={1}>
+          <Button
+            fullWidth
+            onClick={() => navigate('/history')}
+            variant="outlined"
+            sx={outlinedButtonSx}
+          >
+            Activity history
+          </Button>
+
+          <Button
+            fullWidth
+            onClick={() => navigate('/account')}
+            variant="outlined"
+            sx={outlinedButtonSx}
+          >
+            Account details
+          </Button>
+        </Stack>
+      </Stack>
     </Screen>
   )
 }

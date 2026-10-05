@@ -122,7 +122,7 @@ export function Login() {
         <Box sx={{ mb: 3, position: 'relative', textAlign: 'center' }}>
           {/* Back button */}
           <IconButton
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/')}
             aria-label="Back"
             size="small"
             sx={{

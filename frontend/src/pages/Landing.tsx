@@ -141,7 +141,7 @@ export function Landing() {
             maxWidth: 290,
           }}
         >
-          Guided walks to help you slow down and reset.
+          Guided walks to help you slow down and reset
         </Typography>
       </Box>
 
