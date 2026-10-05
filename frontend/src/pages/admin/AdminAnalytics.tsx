@@ -6,7 +6,7 @@ import {
   getAnalyticsReports,
   getAnalyticsSummary,
 } from '../../api'
-import { Button, ErrorText, Loading } from '../../components/ui'
+import { Button, ErrorText } from '../../components/ui'
 import { AdminLayout } from './AdminLayout'
 
 export function AdminAnalytics() {
@@ -59,7 +59,7 @@ export function AdminAnalytics() {
   if (loading) {
     return (
       <AdminLayout title="Analytics">
-        <Loading />
+        <p className="text-sm text-muted">Loading…</p>
       </AdminLayout>
     )
   }
