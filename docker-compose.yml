@@ -37,6 +37,10 @@ services:
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB_NAME: walkingapp
       JWT_SECRET: local-docker-dev-only-secret-not-for-production-0123456789
+      # Taken from the repo-root .env if you have one; otherwise random passwords are printed in this service's log.
+      SEED_PASSWORD_PARTICIPANT: ${SEED_PASSWORD_PARTICIPANT:-}
+      SEED_PASSWORD_RESEARCHER: ${SEED_PASSWORD_RESEARCHER:-}
+      SEED_PASSWORD_DOCTOR: ${SEED_PASSWORD_DOCTOR:-}
     depends_on:
       mongo:
         condition: service_healthy

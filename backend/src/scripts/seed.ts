@@ -5,24 +5,14 @@
  *
  *   npm run seed
  */
-import bcrypt from 'bcryptjs'
 import { SURVEY_VERSION } from '../../../shared/survey'
-import type { GeneratedScript, Role, RouteOption } from '../../../shared/types'
+import type { GeneratedScript, RouteOption } from '../../../shared/types'
 import { config } from '../config'
 import { connectDb, disconnectDb, syncIndexes } from '../db'
-import { Account } from '../models/Account'
 import { Condition } from '../models/Condition'
 import { WalkRecord } from '../models/WalkRecord'
 import { buildSegments } from '../services/scriptSegments'
-
-interface SeedAccount {
-  _id: string
-  role: Role
-  password: string
-  displayName: string
-  condition?: string
-  joinedAt: Date
-}
+import { SEED_PARTICIPANT_ID, upsertSeedAccounts } from './seedAccounts'
 
 /** A short loop near the University of Melbourne, so the seeded history draws on the map. */
 const SAMPLE_ROUTE: RouteOption = {
@@ -92,22 +82,7 @@ async function main() {
   }
   console.log('[seed] conditions A, B')
 
-  const joined = new Date('2026-08-12T09:00:00Z')
-  const accounts: SeedAccount[] = [
-    { _id: 'demo', role: 'participant', password: 'demo', displayName: 'Participant demo', condition: 'A', joinedAt: joined },
-    { _id: 'AAA001', role: 'participant', password: 'password', displayName: 'Participant AAA001', condition: 'A', joinedAt: joined },
-    { _id: 'admin', role: 'researcher', password: 'admin', displayName: 'Research admin', joinedAt: now },
-    { _id: 'doctor', role: 'medical_professional', password: 'doctor', displayName: 'Medical professional', joinedAt: now },
-  ]
-  for (const a of accounts) {
-    const { password, ...rest } = a
-    await Account.updateOne(
-      { _id: a._id },
-      { $set: { ...rest, passwordHash: await bcrypt.hash(password, 10), active: true, createdBy: 'seed' } },
-      { upsert: true },
-    )
-  }
-  console.log('[seed] accounts demo/demo, AAA001/password, admin/admin, doctor/doctor')
+  await upsertSeedAccounts((line) => console.log(`[seed] ${line}`))
 
   const walks = [
     {
@@ -131,26 +106,25 @@ async function main() {
       script: sampleScript(30),
     },
   ]
-  for (const participantId of ['demo', 'AAA001']) {
-    for (const w of walks) {
-      await WalkRecord.updateOne(
-        { participantId, clientId: w.clientId },
-        {
-          $setOnInsert: {
-            ...w,
-            participantId,
-            condition: 'A',
-            preparationId: null,
-            surveyVersion: SURVEY_VERSION,
-            completed: true,
-            createdAt: now,
-          },
+  const participantId = SEED_PARTICIPANT_ID
+  for (const w of walks) {
+    await WalkRecord.updateOne(
+      { participantId, clientId: w.clientId },
+      {
+        $setOnInsert: {
+          ...w,
+          participantId,
+          condition: 'A',
+          preparationId: null,
+          surveyVersion: SURVEY_VERSION,
+          completed: true,
+          createdAt: now,
         },
-        { upsert: true },
-      )
-    }
+      },
+      { upsert: true },
+    )
   }
-  console.log('[seed] two walks each for demo and AAA001')
+  console.log(`[seed] two walks for ${SEED_PARTICIPANT_ID}`)
   await disconnectDb()
   console.log('[seed] done')
 }

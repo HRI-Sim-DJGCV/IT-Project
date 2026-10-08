@@ -17,11 +17,13 @@ Wait for `api ... listening on http://localhost:8000/v1` in the logs (the first 
 | <http://localhost:5173> | The app, as on a phone (use DevTools device emulation) |
 | <http://localhost:5173/phone.html> | The app inside an iPhone frame, for demos on a laptop |
 
-| Role | User ID | Password | Lands on |
-|---|---|---|---|
-| Participant | `demo` | `demo` | Home → walk flow |
-| Research admin | `admin` | `admin` | Admin dashboard |
-| Medical professional | `doctor` | `doctor` | Admin dashboard |
+| Role | User ID | Lands on |
+|---|---|---|
+| Participant | `participant01` | Home → walk flow |
+| Researcher | `researcher01` | Admin dashboard |
+| Medical professional | `doctor01` | Admin dashboard |
+
+Passwords are not in the repo. Put the team's values in `.env` as `SEED_PASSWORD_PARTICIPANT`, `SEED_PASSWORD_RESEARCHER` and `SEED_PASSWORD_DOCTOR` before the first `up`; without them the seed generates random ones and prints them once (`docker compose logs seed`).
 
 This starts a local MongoDB (seeded with the logins above), the API, the web app, and a **stub AI service** that returns a fixed script and silent audio. Every screen works, including the full walk flow; you just won't hear a voice. Walks saved this way are marked `stub-model` in the database.
 
@@ -87,7 +89,8 @@ The API, the web app and docker compose all read this one file. A `backend/.env`
 ```bash
 cd backend
 npm install
-npm run seed             # only for a fresh local database; Atlas already has the demo logins
+npm run seed             # only for a fresh local database; also resets conditions and sample walks
+npm run accounts         # create/update just the three test logins (safe on Atlas)
 npm run dev              # http://localhost:8000/v1, reloads on save
 ```
 
