@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getUtcWeekRange } from '../../shared/week'
 import { createApp } from '../src/app'
 import { signToken } from '../src/auth/jwt'
+import { Account } from '../src/models/Account'
 import { WalkRecord, type WalkRecordDoc } from '../src/models/WalkRecord'
 import { buildDetailedWalkCsv } from '../src/services/walkCsv'
 
@@ -101,10 +102,16 @@ describe('detailed walk CSV', () => {
   })
 })
 
+/** requireAuth re-checks the account on every request; stand in for the database lookup. */
+function mockAccount(account: { role: string; active: boolean }) {
+  vi.spyOn(Account, 'findById').mockReturnValue({ lean: vi.fn().mockResolvedValue(account) } as never)
+}
+
 describe('GET /v1/admin/analytics/export.csv', () => {
   it('restricts the download to researchers and medical professionals', async () => {
     const anonymous = await request(app).get('/v1/admin/analytics/export.csv')
     expect(anonymous.status).toBe(401)
+    mockAccount({ role: 'participant', active: true })
     const participant = signToken({ id: 'demo', role: 'participant' }).token
     const forbidden = await request(app).get('/v1/admin/analytics/export.csv').auth(participant, { type: 'bearer' })
     expect(forbidden.status).toBe(403)
@@ -116,6 +123,7 @@ describe('GET /v1/admin/analytics/export.csv', () => {
     const lean = vi.fn().mockResolvedValue([makeWalk()])
     const sort = vi.fn().mockReturnValue({ lean })
     const find = vi.spyOn(WalkRecord, 'find').mockReturnValue({ sort } as never)
+    mockAccount({ role: 'researcher', active: true })
     const token = signToken({ id: 'admin', role: 'researcher' }).token
     const response = await request(app).get('/v1/admin/analytics/export.csv').auth(token, { type: 'bearer' })
     expect(response.status).toBe(200)

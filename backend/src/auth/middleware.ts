@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import type { Role } from '../../../shared/types'
 import { forbidden, unauthenticated } from '../errors'
+import { Account } from '../models/Account'
 import { verifyToken, type AuthUser } from './jwt'
 
 declare global {
@@ -11,12 +12,18 @@ declare global {
   }
 }
 
-/** Identity always comes from the token, never from the request body. */
-export function requireAuth(req: Request, _res: Response, next: NextFunction) {
+/**
+ * Identity always comes from the token, never from the request body. The account is
+ * re-checked on every request, so deactivating it (or changing its role) takes effect
+ * immediately instead of when the token expires.
+ */
+export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
   const user = token ? verifyToken(token) : null
   if (!user) return next(unauthenticated())
+  const account = await Account.findById(user.id, { role: 1, active: 1 }).lean()
+  if (!account || !account.active || account.role !== user.role) return next(unauthenticated())
   req.user = user
   next()
 }
