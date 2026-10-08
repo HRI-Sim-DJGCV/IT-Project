@@ -5,10 +5,13 @@ import { connectDb, disconnectDb, syncIndexes } from './db'
 // Importing the models registers them so syncIndexes() sees all of them.
 import './models/Account'
 import './models/Condition'
+import './models/ParticipantMetrics'
 import './models/WalkPreparation'
 import './models/WalkRecord'
+import './models/WeeklyReport'
 import { aiClient } from './services/aiClient'
 import { failStalePreparations } from './services/preparation'
+import { initializeCronJobs, stopCronJobs } from './services/cronService'
 
 async function main() {
   await connectDb()
@@ -20,10 +23,12 @@ async function main() {
   console.log(
     `[api] AI service ${config.AI_SERVICE_URL} is ${(await aiClient.health()) ? 'reachable' : 'NOT reachable (routes and scripts will fail until it is up)'}`,
   )
+  initializeCronJobs()
   const server = createApp().listen(config.PORT, () => {
     console.log(`[api] listening on http://localhost:${config.PORT}/v1`)
   })
   const shutdown = async () => {
+    stopCronJobs()
     server.close()
     await disconnectDb()
     process.exit(0)
