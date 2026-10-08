@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { SCORING_VERSION, calmScore, walkScores } from '../../../shared/scoring'
 import { SURVEY_ITEMS, SURVEY_VERSION } from '../../../shared/survey'
+import { getUtcWeekRange } from '../../../shared/week'
 import type { AdminParticipantItem, CreateParticipantResult, SurveyResponse } from '../../../shared/types'
 import { currentUser, requireAdmin, requireAuth } from '../auth/middleware'
 import { conflict, notFound, parse } from '../errors'
@@ -13,6 +14,7 @@ import { generateAccessCode, hashAccessCode } from '../services/accessCode'
 import { nextParticipantId } from '../services/participantIds'
 import { toConditionSetting, toWalkRecord } from '../services/serializers'
 import { triggerWeeklyAnalytics } from '../services/cronService'
+import { buildDetailedWalkCsv } from '../services/walkCsv'
 import {
   conditionListSchema,
   conditionUpdateSchema,
@@ -289,6 +291,16 @@ adminRouter.get('/export.csv', async (_req, res) => {
 // ---------------------------------------------------------------------------
 // Analytics: Weekly reports and participant metrics
 // ---------------------------------------------------------------------------
+
+/** Current UTC calendar week's saved walks, read live rather than from a report snapshot. */
+adminRouter.get('/analytics/export.csv', async (_req, res) => {
+  const { start, end } = getUtcWeekRange()
+  const walks = await WalkRecord.find({ date: { $gte: start, $lt: end } }).sort({ date: -1, _id: 1 }).lean()
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="walking_meditation_walks_week_${start.toISOString().slice(0, 10)}.csv"`)
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(buildDetailedWalkCsv(walks))
+})
 
 /**
  * GET /admin/analytics/dashboard: Current week summary for the dashboard.

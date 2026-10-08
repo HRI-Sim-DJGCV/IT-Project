@@ -136,6 +136,11 @@ export function getAdminExportCsv(): Promise<Blob> {
 // Analytics
 // ---------------------------------------------------------------------------
 
+/** GET /admin/analytics/export.csv: all saved walk data for the current UTC week. */
+export function getAnalyticsWeeklyExportCsv(): Promise<Blob> {
+  return apiBlob('/admin/analytics/export.csv')
+}
+
 export interface WeeklyReportData {
   _id: string
   week: string

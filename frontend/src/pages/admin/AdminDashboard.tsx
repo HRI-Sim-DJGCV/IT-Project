@@ -65,7 +65,7 @@ export function AdminDashboard() {
       <div className="mt-auto flex flex-col gap-2.5 pt-4">
         <ErrorText>{exportError}</ErrorText>
         <Button variant="secondary" onClick={exportCsv} disabled={exporting}>
-          {exporting ? 'Preparing…' : 'Export CSV (one row per walk)'}
+          {exporting ? 'Preparing…' : 'Download all walks (CSV)'}
         </Button>
         <Button onClick={() => setShowAddModal(true)} disabled={loading || !!error}>
           Add participant
