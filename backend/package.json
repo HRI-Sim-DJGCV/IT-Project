@@ -10,6 +10,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/scripts/seed.ts",
+    "accounts": "tsx src/scripts/accounts.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

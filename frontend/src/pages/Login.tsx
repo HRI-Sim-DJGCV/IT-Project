@@ -26,13 +26,6 @@ const ROLES: { value: Role; label: string }[] = [
   { value: 'researcher', label: 'Researcher' },
 ]
 
-// for testing purpose only to be deleted
-const DEV_ACCOUNTS = [
-  { role: 'Participant', user: 'demo', pass: 'demo' },
-  { role: 'Researcher', user: 'doctor', pass: 'doctor' },
-  { role: 'Admin', user: 'admin', pass: 'admin' },
-]
-
 export function Login() {
   const navigate = useNavigate()
   const { signIn } = useSession()
@@ -285,42 +278,6 @@ export function Login() {
             )}
           </Box>
         </form>
-
-        <Box
-          sx={{
-            mt: 3.5,
-            p: 2,
-            borderRadius: '16px',
-            bgcolor: hcBg ?? 'var(--color-surface, #f5f5f7)',
-            border: highContrast ? '2px dashed #FFFF00' : '1px dashed var(--color-line, #e2e4e9)',
-          }}
-        >
-          <Typography
-            variant="caption"
-            sx={{ display: 'block', fontWeight: 600, color: hcColor ?? '#4b5563', mb: 0.5 }}
-          >
-            Dev. test accounts:
-          </Typography>
-
-          {DEV_ACCOUNTS.map(({ role, user, pass }) => (
-            <Typography
-              key={user}
-              variant="caption"
-              sx={{
-                display: 'block',
-                color: hcColor ?? '#6b7280',
-                '& code': {
-                  color: hcColor ?? 'inherit',
-                  bgcolor: highContrast ? '#1a1a00' : undefined,
-                  px: 0.5,
-                  borderRadius: '4px',
-                },
-              }}
-            >
-              • {role}: <code>{user}</code> / <code>{pass}</code>
-            </Typography>
-          ))}
-        </Box>
       </Paper>
     </Box>
   )
