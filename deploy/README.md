@@ -35,6 +35,23 @@ cd /opt/walking-meditation/app && git pull
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 ```
 
+## Switching to the real AI service
+
+The stack runs the AI stub (canned route, script and silent audio). Scripts come from Gemini and audio from Google Cloud Text-to-Speech, both hosted APIs, so the real service fits on the t3.small. To switch:
+
+1. In `deploy/.env`, fill in `GEMINI_API_KEY` and, if Cloud Text-to-Speech is on a different project from the Maps key, `GOOGLE_TTS_API_KEY`. Set `AI_INTERNAL_KEY` and `INTERNAL_KEY` to the same random value.
+2. In `deploy/docker-compose.prod.yml`, replace the `ai-stub` service with:
+
+   ```yaml
+   ai:
+     build: ../server
+     restart: unless-stopped
+     env_file: .env
+   ```
+
+   and point the API at it: `AI_SERVICE_URL: http://ai:8001`, `depends_on: [ai]`.
+3. Rebuild: `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build`
+
 ## Saving credits
 
 Stopping the instance pauses compute charges (the disk and Elastic IP still bill a little):

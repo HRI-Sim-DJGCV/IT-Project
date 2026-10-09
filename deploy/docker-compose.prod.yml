@@ -3,8 +3,8 @@
 #   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 #
 # Caddy terminates HTTPS for ${API_HOST} and proxies to the API. MongoDB is on
-# Atlas. The AI service is the stub for now (the free-plan t3.small can't run
-# the real voice model); swap it for ./server when there's a bigger instance.
+# Atlas. The AI service is the stub for now; see deploy/README.md to swap in the
+# real one (./server) once the Gemini and Google Cloud TTS keys are set.
 
 services:
   caddy:

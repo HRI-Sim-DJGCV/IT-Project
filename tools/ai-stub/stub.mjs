@@ -1,5 +1,5 @@
 // Stand-in for the Python AI service (server/) so the whole app can be run and
-// clicked through without Google / Gemini keys or the voice model.
+// clicked through without Google / Gemini keys.
 // Same endpoints as server/main.py, canned answers:
 //   POST /route/generate-from-text  -> a short loop near the University of Melbourne + one park detour
 //   POST /script/generate           -> a fixed three-section script
