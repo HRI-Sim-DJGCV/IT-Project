@@ -1,15 +1,20 @@
 import { Router } from 'express'
 import { SCORING_VERSION, calmScore, walkScores } from '../../../shared/scoring'
 import { SURVEY_ITEMS, SURVEY_VERSION } from '../../../shared/survey'
+import { getUtcWeekRange } from '../../../shared/week'
 import type { AdminParticipantItem, CreateParticipantResult, SurveyResponse } from '../../../shared/types'
 import { currentUser, requireAdmin, requireAuth } from '../auth/middleware'
 import { conflict, notFound, parse } from '../errors'
 import { Account, type AccountDoc } from '../models/Account'
 import { Condition } from '../models/Condition'
+import { ParticipantMetrics } from '../models/ParticipantMetrics'
 import { WalkRecord, type WalkRecordDoc } from '../models/WalkRecord'
+import { WeeklyReport } from '../models/WeeklyReport'
 import { generateAccessCode, hashAccessCode } from '../services/accessCode'
 import { nextParticipantId } from '../services/participantIds'
 import { toConditionSetting, toWalkRecord } from '../services/serializers'
+import { triggerWeeklyAnalytics } from '../services/cronService'
+import { buildDetailedWalkCsv } from '../services/walkCsv'
 import {
   conditionListSchema,
   conditionUpdateSchema,
@@ -281,4 +286,169 @@ adminRouter.get('/export.csv', async (_req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', `attachment; filename="walks-${new Date().toISOString().slice(0, 10)}.csv"`)
   res.send(csv)
+})
+
+// ---------------------------------------------------------------------------
+// Analytics: Weekly reports and participant metrics
+// ---------------------------------------------------------------------------
+
+/** Current UTC calendar week's saved walks, read live rather than from a report snapshot. */
+adminRouter.get('/analytics/export.csv', async (_req, res) => {
+  const { start, end } = getUtcWeekRange()
+  const walks = await WalkRecord.find({ date: { $gte: start, $lt: end } }).sort({ date: -1, _id: 1 }).lean()
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="walking_meditation_walks_week_${start.toISOString().slice(0, 10)}.csv"`)
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(buildDetailedWalkCsv(walks))
+})
+
+/**
+ * GET /admin/analytics/dashboard: Current week summary for the dashboard.
+ * Returns the most recent weekly report (or null if none exists).
+ */
+adminRouter.get('/analytics/dashboard', async (_req, res) => {
+  const report = await WeeklyReport.findOne().sort({ week: -1 }).lean()
+  if (!report) {
+    res.json({
+      report: null,
+      message: 'No analytics data available yet. Reports are generated every Monday at 00:00 UTC.',
+    })
+    return
+  }
+  res.json({ report })
+})
+
+/**
+ * GET /admin/analytics/reports: Paginated list of weekly reports.
+ * Query params: page (default 1), limit (default 10, max 50)
+ */
+adminRouter.get('/analytics/reports', async (req, res) => {
+  const page = Math.max(1, parseInt(String(req.query.page ?? 1), 10))
+  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? 10), 10)))
+  const skip = (page - 1) * limit
+
+  const [reports, total] = await Promise.all([
+    WeeklyReport.find().sort({ week: -1 }).skip(skip).limit(limit).lean(),
+    WeeklyReport.countDocuments(),
+  ])
+
+  res.json({
+    reports,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  })
+})
+
+/**
+ * GET /admin/analytics/reports/:week: Get report for a specific week.
+ * Week should be a valid ISO date string (e.g., 2024-10-07 for the week starting Monday).
+ */
+adminRouter.get('/analytics/reports/:week', async (req, res) => {
+  const weekStr = String(req.params.week)
+  const weekDate = new Date(`${weekStr}T00:00:00Z`)
+  if (Number.isNaN(weekDate.getTime())) {
+    throw conflict(`Invalid week date format: "${weekStr}". Use ISO format (e.g., 2024-10-07).`)
+  }
+
+  const report = await WeeklyReport.findOne({ week: weekDate }).lean()
+  if (!report) throw notFound('Weekly report')
+
+  res.json({ report })
+})
+
+/**
+ * GET /admin/analytics/participants/:participantId: Get metrics for a participant.
+ * Returns recent weekly metrics for trend analysis.
+ * Query params: weeks (default 12, max 52)
+ */
+adminRouter.get('/analytics/participants/:participantId', async (req, res) => {
+  const participantId = String(req.params.participantId)
+  const weeksParam = parseInt(String(req.query.weeks ?? 12), 10)
+  const weeks = Math.min(52, Math.max(1, weeksParam))
+
+  const cutoff = new Date()
+  cutoff.setUTCDate(cutoff.getUTCDate() - weeks * 7)
+
+  const metrics = await ParticipantMetrics.find({
+    participantId,
+    weekStart: { $gte: cutoff },
+  })
+    .sort({ weekStart: -1 })
+    .lean()
+
+  if (metrics.length === 0) throw notFound('Participant metrics')
+
+  res.json({
+    participantId,
+    metrics,
+    periodWeeks: weeks,
+  })
+})
+
+/**
+ * POST /admin/analytics/generate: Manually trigger weekly analytics generation.
+ * Generates both WeeklyReport and ParticipantMetrics for the current/specified week.
+ * Query params: week (optional, ISO date string; defaults to current week)
+ */
+adminRouter.post('/analytics/generate', async (req, res) => {
+  let targetWeek: Date | undefined
+  const weekParam = req.query.week
+
+  if (weekParam) {
+    const weekStr = String(weekParam)
+    const weekDate = new Date(`${weekStr}T00:00:00Z`)
+    if (Number.isNaN(weekDate.getTime())) {
+      throw conflict(`Invalid week date format: "${weekStr}". Use ISO format (e.g., 2024-10-07).`)
+    }
+    targetWeek = weekDate
+  }
+
+  const result = await triggerWeeklyAnalytics()
+
+  res.json({
+    success: true,
+    message: 'Analytics generated successfully',
+    data: {
+      week: result.report.week,
+      totalWalks: result.report.totalWalks,
+      activeParticipants: result.report.activeParticipants,
+      participantMetricsGenerated: result.participantCount,
+    },
+  })
+})
+
+/**
+ * GET /admin/analytics/summary: Quick stats for the admin dashboard.
+ * Returns aggregate metrics across all time.
+ */
+adminRouter.get('/analytics/summary', async (_req, res) => {
+  const [totalReports, latestReport, participantMetricsCount] = await Promise.all([
+    WeeklyReport.countDocuments(),
+    WeeklyReport.findOne().sort({ week: -1 }).lean(),
+    ParticipantMetrics.countDocuments(),
+  ])
+
+  const allReports = await WeeklyReport.find().select('totalWalks completedWalks activeParticipants').lean()
+  const totalWalksAllTime = allReports.reduce((sum, r) => sum + r.totalWalks, 0)
+  const totalCompletedAllTime = allReports.reduce((sum, r) => sum + r.completedWalks, 0)
+
+  res.json({
+    reports: {
+      total: totalReports,
+      latest: latestReport ?? null,
+    },
+    metrics: {
+      participantMetricsRecorded: participantMetricsCount,
+      totalWalksAllTime,
+      totalCompletedAllTime,
+      overallCompletionRate:
+        totalWalksAllTime > 0
+          ? Math.round((totalCompletedAllTime / totalWalksAllTime) * 10000) / 100
+          : 0,
+    },
+  })
 })

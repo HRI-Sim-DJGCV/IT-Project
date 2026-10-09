@@ -18,10 +18,6 @@ const schema = z.object({
   NODE_ENV: z.string().default('development'),
   /** Optional so the API can boot without it (e.g. the keyless docker quick start); route generation errors until it is set. */
   GOOGLE_MAPS_API_KEY: z.string().default(''),
-  OVERPASS_API_URL: z
-    .string()
-    .url()
-    .default('https://overpass-api.de/api/interpreter'),
   /** The internal Python AI service (routes, script generation, text-to-speech). Never exposed to the app. */
   AI_SERVICE_URL: z.string().url().default('http://localhost:8001'),
   /** Optional shared secret sent as X-Internal-Key; set the same value in server/.env */

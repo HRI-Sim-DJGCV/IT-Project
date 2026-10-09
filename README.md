@@ -17,15 +17,17 @@ Wait for `api ... listening on http://localhost:8000/v1` in the logs (the first 
 | <http://localhost:5173> | The app, as on a phone (use DevTools device emulation) |
 | <http://localhost:5173/phone.html> | The app inside an iPhone frame, for demos on a laptop |
 
-| Role | User ID | Password | Lands on |
-|---|---|---|---|
-| Participant | `demo` | `demo` | Home → walk flow |
-| Research admin | `admin` | `admin` | Admin dashboard |
-| Medical professional | `doctor` | `doctor` | Admin dashboard |
+| Role | User ID | Lands on |
+|---|---|---|
+| Participant | `participant01` | Home → walk flow |
+| Researcher | `researcher01` | Admin dashboard |
+| Medical professional | `doctor01` | Admin dashboard |
+
+Passwords are not in the repo. Put the team's values in `.env` as `SEED_PASSWORD_PARTICIPANT`, `SEED_PASSWORD_RESEARCHER` and `SEED_PASSWORD_DOCTOR` before the first `up`; without them the seed generates random ones and prints them once (`docker compose logs seed`).
 
 This starts a local MongoDB (seeded with the logins above), the API, the web app, and a **stub AI service** that returns a fixed script and silent audio. Every screen works, including the full walk flow; you just won't hear a voice. Walks saved this way are marked `stub-model` in the database.
 
-Route generation calls Google Maps from the Node API, so it needs keys: copy `.env.example` to `.env` at the repo root, fill in `GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY`, and compose picks them up on the next `up --build`. Without them the app runs but generating a route shows an error.
+Route generation calls Google Maps from the Node API, so it needs keys: copy `.env.example` to `.env` at the repo root, fill in `GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY`, and compose picks them up on the next `up --build`. Enable Geocoding API, Routes API, and Places API (New) for the server-side key. Without them the app runs but generating a route shows an error.
 
 ```bash
 docker compose down        # stop
@@ -87,7 +89,8 @@ The API, the web app and docker compose all read this one file. A `backend/.env`
 ```bash
 cd backend
 npm install
-npm run seed             # only for a fresh local database; Atlas already has the demo logins
+npm run seed             # only for a fresh local database; also resets conditions and sample walks
+npm run accounts         # create/update just the three test logins (safe on Atlas)
 npm run dev              # http://localhost:8000/v1, reloads on save
 ```
 
@@ -126,6 +129,19 @@ Set `TTS_ENABLED=false` in `server/.env` to skip the Cloud Text-to-Speech check 
 3. **Prepare**: `POST /me/walks/prepare` starts generation; the app polls `GET /me/walks/prepare/{id}` while the server writes the script (Gemini) and renders each segment to mp3 (Google Cloud TTS, voice from the participant's condition). When ready the app downloads the clips so the walk does not depend on the network.
 4. **Walk**: segments play at their scheduled second, queued so they never overlap.
 5. **Post-survey** → `POST /me/walks` stores the walk with the exact script that was read.
+
+## Tests and CI
+
+Every pull request and every push to `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml): the API is typechecked, tested and compiled; the web app is linted, tested and built; the Python service gets a syntax check; and the two Docker images are built (not pushed) so the quick start cannot silently break.
+
+Run the same checks locally:
+
+```bash
+cd backend && npm run typecheck && npm test      # vitest + supertest, no database needed
+cd frontend && npm run lint && npm test && npm run build
+```
+
+`npm run test:watch` in either folder re-runs on save. Backend tests live in `backend/test/` (scoring rule, request validation, polyline decoding, script segmenting, the HTTP error and auth behaviour of the app); frontend tests sit next to the code as `*.test.ts(x)` (the survey form and the API client).
 
 ## Deploying
 

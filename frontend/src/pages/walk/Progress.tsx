@@ -5,6 +5,7 @@ import { RouteMap } from '../../components/RouteMap'
 import { Button, Card, ErrorText, Screen } from '../../components/ui'
 import { useSession } from '../../context/SessionContext'
 import { useScriptAudio } from '../../hooks/useScriptAudio'
+import { useWalkDistance } from '../../hooks/useWalkDistance'
 
 function fmt(sec: number) {
   const m = Math.floor(sec / 60)
@@ -24,9 +25,20 @@ export function Progress() {
   const audio = useScriptAudio(urls)
 
   const totalSec = (draft?.plan?.duration ?? 15) * 60
-  const [elapsed, setElapsed] = useState(0)
+  // Seconds of wall-clock time spent walking; recorded as the walk's real duration.
+  const [activeSec, setActiveSec] = useState(0)
   const [phase, setPhase] = useState<'ready' | 'running' | 'paused'>('ready')
   const firedRef = useRef<Set<number>>(new Set())
+  const autoPausedRef = useRef(false)
+
+  // The guide follows the participant's feet, not the clock: progress is distance walked.
+  // If location is unavailable (denied, desktop, no signal) it falls back to the timer.
+  const routeMetres = (draft?.route?.distanceKm ?? 0) * 1000
+  const tracking = useWalkDistance(phase !== 'ready')
+  const followGps = tracking.status !== 'unavailable' && routeMetres > 0
+  const elapsed = followGps ? Math.min(totalSec, (tracking.distanceM / routeMetres) * totalSec) : activeSec
+  // Standing still: hold the guide until the participant moves again. Not held while still finding the location.
+  const holding = phase === 'running' && followGps && tracking.status === 'tracking' && !tracking.moving
 
   // Guard: the walk needs a route and a generated script.
   useEffect(() => {
@@ -53,7 +65,7 @@ export function Progress() {
   // Ticker
   useEffect(() => {
     if (phase !== 'running') return
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000)
+    const id = setInterval(() => setActiveSec((e) => e + 1), 1000)
     return () => clearInterval(id)
   }, [phase])
 
@@ -69,6 +81,20 @@ export function Progress() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsed, phase, segments])
 
+  // Pause the audio while the participant is stationary; resume when they walk on.
+  // Their own Stop/Resume button is separate and is never overridden here.
+  useEffect(() => {
+    if (phase !== 'running') return
+    if (holding && !autoPausedRef.current) {
+      autoPausedRef.current = true
+      audio.pause()
+    } else if (!holding && autoPausedRef.current) {
+      autoPausedRef.current = false
+      audio.resume()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holding, phase])
+
   function start() {
     // The first segments are due at 0: play them inside this click so mobile browsers allow audio.
     const first = segments.filter((s) => s.atSecond <= 0)
@@ -78,6 +104,7 @@ export function Progress() {
   }
 
   function togglePause() {
+    autoPausedRef.current = false
     if (phase === 'running') {
       audio.pause()
       setPhase('paused')
@@ -89,7 +116,7 @@ export function Progress() {
 
   function finish() {
     audio.stop()
-    updateDraft({ actualMinutes: Math.max(1, Math.round(elapsed / 60)) })
+    updateDraft({ actualMinutes: Math.max(1, Math.round(activeSec / 60)) })
     navigate('/walk/post-survey', { replace: true })
   }
 
@@ -125,6 +152,15 @@ export function Progress() {
       <div className="text-center">
         <p className="text-4xl font-semibold tabular-nums">{fmt(remaining)}</p>
         <p className="text-sm text-muted">remaining · {draft?.route?.distanceKm} km</p>
+        {phase !== 'ready' && tracking.status === 'unavailable' ? (
+          <p className="mt-1 text-xs text-muted">Location isn't available, so your guide is following the timer.</p>
+        ) : null}
+        {phase === 'running' && followGps && tracking.status === 'waiting' ? (
+          <p className="mt-1 text-xs text-muted">Finding your location…</p>
+        ) : null}
+        {holding && tracking.status === 'tracking' ? (
+          <p className="mt-1 text-xs text-muted">Your guide will continue when you start walking again.</p>
+        ) : null}
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-line">
           <div className="h-full bg-primary transition-[width] duration-1000 ease-linear" style={{ width: `${progress * 100}%` }} />
         </div>

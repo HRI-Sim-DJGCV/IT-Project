@@ -210,6 +210,7 @@ Require `role ∈ { medical_professional, researcher }`; a participant token get
 | `GET /admin/walks` | Every walk, newest first, with `condition`, `scores` and `script` |
 | `GET /admin/stats` | `{ scoringVersion, totals, perCondition: [{ condition, name, participants, walks, meanPreCalm, meanPostCalm, meanDeltaCalm }] }` |
 | `GET /admin/export.csv` | One row per walk: ids, dates, plan, route (incl. `via_park`), raw answers pre/post, the three calm scores, `scoring_version`, `survey_version`, `script_model`, `script_prompt_version`, `script_voice`, `script_word_count`, `script_text` |
+| `GET /admin/analytics/export.csv` | Live CSV of all saved walks dated within the current UTC calendar week (Monday inclusive to next Monday exclusive). One row per walk, all stored fields flattened into dot-separated columns, arrays in JSON cells, derived calm scores, and `walk_record_json` containing the complete original record. UTF-8 with BOM; an empty week returns headers only. Includes incomplete saved walks; does not include unsaved drafts or MP3 bytes. |
 
 ## 6. AI service contract (internal)
 

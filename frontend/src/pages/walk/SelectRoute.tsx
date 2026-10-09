@@ -13,6 +13,18 @@ export function SelectRoute() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<RouteOption | null>(draft?.route ?? null)
   const [attempt, setAttempt] = useState(0)
+  const startPoint = draft?.plan?.startCoordinates
+    ? ([
+        draft.plan.startCoordinates.lat,
+        draft.plan.startCoordinates.lon,
+      ] as [number, number])
+    : null
+  const destinationPoint = draft?.plan?.endCoordinates
+    ? ([
+        draft.plan.endCoordinates.lat,
+        draft.plan.endCoordinates.lon,
+      ] as [number, number])
+    : null
 
   useEffect(() => {
     if (!draft?.plan) {
@@ -64,7 +76,17 @@ export function SelectRoute() {
         </Button>
       }
     >
-      <RouteMap route={selected} className="h-44" />
+      <RouteMap
+        route={selected}
+        startPoint={startPoint}
+        destinationPoint={destinationPoint}
+        className="h-44"
+      />
+      {!selected ? (
+        <p className="text-center text-xs text-muted">
+          Start and destination are shown while your route options are prepared.
+        </p>
+      ) : null}
 
       {error ? (
         <>

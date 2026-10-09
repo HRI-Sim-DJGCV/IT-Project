@@ -61,7 +61,7 @@ export function AccessCode() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             autoCapitalize="characters"
             autoComplete="one-time-code"
-            placeholder="e.g. K7P2-QX9M"
+            placeholder="e.g. A1B2-C3D4"
             required
           />
         </Field>

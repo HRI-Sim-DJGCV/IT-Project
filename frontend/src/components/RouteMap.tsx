@@ -4,6 +4,7 @@ import {
   MapContainer,
   Polyline,
   TileLayer,
+  Tooltip,
   useMap,
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -59,6 +60,8 @@ function estimatedPosition(
 interface RouteMapProps {
   route?: RouteOption | null
   currentLocation?: MapPoint | null
+  startPoint?: MapPoint | null
+  destinationPoint?: MapPoint | null
   showCurrentLocationMarker?: boolean
   progress?: number
   className?: string
@@ -67,12 +70,20 @@ interface RouteMapProps {
 export function RouteMap({
   route,
   currentLocation,
+  startPoint,
+  destinationPoint,
   showCurrentLocationMarker = true,
   progress,
   className = '',
 }: RouteMapProps) {
   const positions = route?.mapPath ?? EMPTY_POSITIONS
-  const centre = positions[0] ?? currentLocation
+  const start = positions[0] ?? startPoint ?? undefined
+  const destination = positions[positions.length - 1] ?? destinationPoint ?? undefined
+  const previewPositions = [start, destination].filter(
+    (point): point is MapPoint => point !== undefined,
+  )
+  const visiblePositions = positions.length > 1 ? positions : previewPositions
+  const centre = start ?? destination ?? currentLocation
   const walkerPosition = estimatedPosition(positions, progress)
 
   if (!centre) {
@@ -85,8 +96,9 @@ export function RouteMap({
     )
   }
 
-  const start = positions[0]
-  const destination = positions[positions.length - 1]
+  const distinctDestination =
+    destination &&
+    (!start || destination[0] !== start[0] || destination[1] !== start[1])
 
   return (
     <div
@@ -104,38 +116,48 @@ export function RouteMap({
         />
 
         {positions.length > 1 ? (
-          <>
-            <Polyline
-              positions={positions}
-              pathOptions={{
-                color: '#1e2a44',
-                weight: 5,
-                opacity: 0.9,
-              }}
-            />
+          <Polyline
+            positions={positions}
+            pathOptions={{
+              color: '#1e2a44',
+              weight: 5,
+              opacity: 0.9,
+            }}
+          />
+        ) : null}
 
-            <CircleMarker
-              center={start}
-              radius={7}
-              pathOptions={{
-                color: '#ffffff',
-                fillColor: '#1e2a44',
-                fillOpacity: 1,
-                weight: 2,
-              }}
-            />
+        {start ? (
+          <CircleMarker
+            center={start}
+            radius={7}
+            pathOptions={{
+              color: '#ffffff',
+              fillColor: '#1e2a44',
+              fillOpacity: 1,
+              weight: 2,
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} permanent>
+              Start
+            </Tooltip>
+          </CircleMarker>
+        ) : null}
 
-            <CircleMarker
-              center={destination}
-              radius={7}
-              pathOptions={{
-                color: '#1e2a44',
-                fillColor: '#ffffff',
-                fillOpacity: 1,
-                weight: 2,
-              }}
-            />
-          </>
+        {distinctDestination ? (
+          <CircleMarker
+            center={destination}
+            radius={7}
+            pathOptions={{
+              color: '#1e2a44',
+              fillColor: '#ffffff',
+              fillOpacity: 1,
+              weight: 2,
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} permanent>
+              Destination
+            </Tooltip>
+          </CircleMarker>
         ) : null}
 
         {currentLocation && showCurrentLocationMarker ? (
@@ -164,7 +186,7 @@ export function RouteMap({
           />
         ) : null}
 
-        <FitMap positions={positions} centre={centre} />
+        <FitMap positions={visiblePositions} centre={centre} />
       </MapContainer>
     </div>
   )
