@@ -61,7 +61,7 @@ async function participantCondition(userId: string) {
   return { account, condition }
 }
 
-// Each preparation spends OpenAI credits and minutes of TTS compute, so cap
+// Each preparation spends Gemini credits and minutes of TTS compute, so cap
 // starts per IP. Polling GET /me/walks/prepare/{id} is deliberately unlimited.
 const prepareLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false })
 

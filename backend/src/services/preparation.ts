@@ -11,8 +11,8 @@ import { resolveVoice } from './voice'
 
 /** Anything still generating after this long is assumed to have died with the process. */
 const STALE_AFTER_MS = 30 * 60_000
-/** Parallel TTS calls per preparation; the AI service serialises the model anyway. */
-const TTS_CONCURRENCY = 2
+/** Parallel TTS calls per preparation; Google Cloud TTS is a hosted API, not a local model. */
+const TTS_CONCURRENCY = 4
 
 export function audioDirFor(preparationId: string | Types.ObjectId): string {
   return path.join(config.audioDir, String(preparationId))
@@ -78,7 +78,7 @@ export async function runPreparation(id: Types.ObjectId, condition: ConditionDoc
     const queue = [...segments]
     const worker = async () => {
       for (let seg = queue.shift(); seg; seg = queue.shift()) {
-        const mp3 = await aiClient.synthesize(seg.text, voice.speaker, voice.instruct)
+        const mp3 = await aiClient.synthesize(seg.text, voice)
         await writeFile(audioPath(id, seg.audioIndex as number), mp3)
         done += 1
         await setStatus(id, { progress: { done, total: segments.length } })

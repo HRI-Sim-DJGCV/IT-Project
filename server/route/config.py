@@ -25,11 +25,23 @@ def google_maps_api_key() -> str:
     return key
 
 
-def openai_api_key()->str:
-    key = os.getenv("OPENAI_API_KEY")
+def gemini_api_key() -> str:
+    key = os.getenv("GEMINI_API_KEY")
     if not key:
-        from .errors import OpenaiAPIError
-        raise OpenaiAPIError("Missing env var OPENAI_API_KEY")
+        from .errors import GeminiAPIError
+        raise GeminiAPIError("Missing env var GEMINI_API_KEY")
+    return key
+
+
+def google_tts_api_key() -> str:
+    # Falls back to GOOGLE_MAPS_API_KEY so one key covers both if Cloud Text-to-Speech
+    # API is enabled on the same Google Cloud project; set GOOGLE_TTS_API_KEY to use a
+    # different key/project instead.
+    key = os.getenv("GOOGLE_TTS_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
+    if not key:
+        from .errors import GoogleAPIError
+
+        raise GoogleAPIError("Missing env var GOOGLE_TTS_API_KEY (or GOOGLE_MAPS_API_KEY)")
     return key
 
 

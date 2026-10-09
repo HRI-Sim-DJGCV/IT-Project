@@ -37,7 +37,7 @@ sudo service nginx restart
 Create a env file in the root folder and populate with the secrets. 
 ```env
 GOOGLE_MAPS_API_KEY = ""
-OPENAI_API_KEY= ""
+GEMINI_API_KEY= ""
 GIT_PERSONAL_ACCESS_TOKEN = ""
 ```
 make sure to add env to gitignore

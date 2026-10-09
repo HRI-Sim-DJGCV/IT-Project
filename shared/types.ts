@@ -81,8 +81,8 @@ export interface GeneratedScript {
   promptVersion: number
   /** The purpose/context sentence given to the generator */
   context: string
-  /** Voice the audio was rendered with */
-  voice: { speaker: string; instruct: string }
+  /** Voice the audio was rendered with (Google Cloud Text-to-Speech) */
+  voice: { voiceName: string; languageCode: string; speakingRate: number; pitch: number }
   segments: ScriptSegment[]
   /** The raw text exactly as returned by the LLM */
   rawText: string

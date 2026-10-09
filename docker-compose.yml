@@ -4,8 +4,7 @@
 #
 # Starts a local MongoDB, seeds it with the demo logins, the Node API, the web
 # app, and a STUB AI service (canned route, script and silent audio) so nobody
-# needs Google/OpenAI keys or the 1.2 GB voice model to click through every
-# screen. Open http://localhost:5173 (or /phone.html) when the logs settle.
+# needs Google/Gemini keys to click through every screen. Open http://localhost:5173 (or /phone.html) when the logs settle.
 #
 # Real AI (needs server/.env with keys):
 #   docker compose -f docker-compose.yml -f docker-compose.real.yml --profile real up --build
@@ -99,10 +98,7 @@ services:
       PORT: "8001"
     expose:
       - "8001"
-    volumes:
-      - hf-cache:/root/.cache/huggingface
 
 volumes:
   mongo:
   audio:
-  hf-cache:

@@ -22,7 +22,7 @@ const schema = z.object({
   AI_SERVICE_URL: z.string().url().default('http://localhost:8001'),
   /** Optional shared secret sent as X-Internal-Key; set the same value in server/.env */
   AI_INTERNAL_KEY: z.string().optional(),
-  /** Script generation + audio can take minutes on CPU. Per-call timeout. */
+  /** Script generation + audio can take minutes. Per-call timeout. */
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(15 * 60_000),
   /** Where generated mp3 files are written. One folder per walk preparation. */
   AUDIO_DIR: z.string().default('./data/audio'),

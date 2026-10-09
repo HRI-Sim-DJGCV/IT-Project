@@ -13,11 +13,5 @@ class GoogleAPIError(Exception):
 class OverpassError(Exception):
     """Raised when Open Street Maps APIs return an error or unexpected payload."""
 
-class OpenaiAPIError(Exception):
-    """Raised when Open Street Maps APIs return an error or unexpected payload."""
-
-class TTSNotReadyError(RuntimeError):
-    """Raised when the TTS model is not loaded / available."""
-
-class AudioConversionError(RuntimeError):
-    """Raised when There is an error in audio conversion"""
+class GeminiAPIError(Exception):
+    """Raised when the Gemini API returns an error or unexpected payload."""
