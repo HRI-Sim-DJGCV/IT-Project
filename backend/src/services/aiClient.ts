@@ -1,6 +1,6 @@
 /**
  * Client for the internal Python AI service (server/). The app never talks to
- * it directly: every call goes through this API so the Google and OpenAI keys
+ * it directly: every call goes through this API so the Google and Gemini keys
  * stay server-side and identity always comes from our JWT.
  */
 import type { LatLon } from '../../../shared/types'

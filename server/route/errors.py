@@ -13,5 +13,5 @@ class GoogleAPIError(Exception):
 class OverpassError(Exception):
     """Raised when Open Street Maps APIs return an error or unexpected payload."""
 
-class OpenaiAPIError(Exception):
-    """Raised when Open Street Maps APIs return an error or unexpected payload."""
+class GeminiAPIError(Exception):
+    """Raised when the Gemini API returns an error or unexpected payload."""

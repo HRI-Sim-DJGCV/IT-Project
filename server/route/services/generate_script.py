@@ -4,7 +4,7 @@ import asyncio
 from typing import List
 
 from route.clients.google_weather import current_weather_lookup
-from route.clients.openai_client import DEFAULT_MODEL, generate_text
+from route.clients.gemini_client import DEFAULT_MODEL, generate_text
 from route.config import get_script_generation_prompt, render_template
 from route.models import LatLng
 from route.services.enrich_elevation import source_to_dest_elevation

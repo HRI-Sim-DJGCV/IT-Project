@@ -1,6 +1,6 @@
 # AI service stub
 
-A stand-in for the Python AI service in `server/`, so the whole app can be run and clicked through without Google or OpenAI keys.
+A stand-in for the Python AI service in `server/`, so the whole app can be run and clicked through without Google or Gemini keys.
 
 It answers the same three endpoints the Node API calls, with canned data:
 

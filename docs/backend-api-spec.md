@@ -2,7 +2,7 @@
 
 **Status:** implemented in [`backend/`](../backend/) and wired to the frontend. Companion to [frontend-domain-model.md](frontend-domain-model.md); entity shapes live in [`shared/types.ts`](../shared/types.ts), which both sides import.
 
-The backend is a Node/TypeScript HTTP API over MongoDB. It is the **only** thing the React app talks to. Behind it sits an internal Python AI service ([`server/`](../server/)) that the API calls for routes, script generation and text-to-speech; the app never reaches that service and never holds the Google or OpenAI keys.
+The backend is a Node/TypeScript HTTP API over MongoDB. It is the **only** thing the React app talks to. Behind it sits an internal Python AI service ([`server/`](../server/)) that the API calls for routes, script generation and text-to-speech; the app never reaches that service and never holds the Google or Gemini keys.
 
 ```
 frontend ──HTTPS + JWT──▶ backend (Node, :8000) ──HTTP + X-Internal-Key──▶ server (Python, :8001)
@@ -20,7 +20,7 @@ frontend ──HTTPS + JWT──▶ backend (Node, :8000) ──HTTP + X-Interna
 | Auth | Short-lived **JWT** (access token) in an `Authorization: Bearer` header | Stateless, works across Vercel (frontend) and a separate API host |
 | Passwords | `bcryptjs`, cost 10 | Standard |
 | Shared code | `shared/types.ts`, `shared/survey.ts`, `shared/scoring.ts` | One definition of the wire types, the survey items and the calm-score rule |
-| AI service | FastAPI in `server/`, called through `backend/src/services/aiClient.ts` | Routes (Google Routes + Places), scripts (OpenAI), audio (Google Cloud Text-to-Speech). Internal only |
+| AI service | FastAPI in `server/`, called through `backend/src/services/aiClient.ts` | Routes (Google Routes + Places), scripts (Gemini), audio (Google Cloud Text-to-Speech). Internal only |
 | Audio storage | mp3 files under `AUDIO_DIR/<preparationId>/<index>.mp3`, streamed by the API | Simple, no extra service; a Docker volume in Compose |
 | Hosting | One host running `docker compose up api ai` | The AI service must not be publicly reachable |
 | Database | MongoDB Atlas, database `walkingapp` | The team's existing cluster |
@@ -174,7 +174,7 @@ One document per completed walk. Surveys, plan, route and **the generated script
   "actualMinutes": 31,
   "preparationId": ObjectId,
   "script": {
-    "generator": "ai", "model": "gpt-4.1-mini", "promptVersion": 1,
+    "generator": "ai", "model": "gemini-2.5-flash", "promptVersion": 1,
     "context": "A 30-minute walking meditation for stress regulation …",
     "voice": { "voiceName": "en-US-Neural2-D", "languageCode": "en-US", "speakingRate": 0.9, "pitch": 0 },
     "segments": [ { "atSecond": 0, "section": "focused_attention", "title": "Focused attention 1/3", "text": "...", "audioIndex": 0 }, … ],

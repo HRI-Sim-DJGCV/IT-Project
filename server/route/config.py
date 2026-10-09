@@ -25,11 +25,11 @@ def google_maps_api_key() -> str:
     return key
 
 
-def openai_api_key()->str:
-    key = os.getenv("OPENAI_API_KEY")
+def gemini_api_key() -> str:
+    key = os.getenv("GEMINI_API_KEY")
     if not key:
-        from .errors import OpenaiAPIError
-        raise OpenaiAPIError("Missing env var OPENAI_API_KEY")
+        from .errors import GeminiAPIError
+        raise GeminiAPIError("Missing env var GEMINI_API_KEY")
     return key
 
 

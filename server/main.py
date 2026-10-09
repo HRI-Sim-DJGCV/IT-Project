@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from route.config import google_maps_api_key, google_tts_api_key
-from route.errors import GoogleAPIError, OpenaiAPIError
+from route.errors import GeminiAPIError, GoogleAPIError
 from route.models import (
     LatLng,
     ScriptGenerateRequest,
@@ -180,7 +180,7 @@ async def generate_script(payload: ScriptGenerateRequest):
         return ScriptGenerateResponse(script=script, model=SCRIPT_MODEL, prompt_version=PROMPT_VERSION)
     except HTTPException:
         raise
-    except OpenaiAPIError as error:
+    except GeminiAPIError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(error)) from error
