@@ -4,8 +4,8 @@
 # breaks the tests is never deployed), or by hand from the Actions tab.
 # GitHub has no SSH access to the instance: the job asks AWS Systems Manager
 # to run the update on it, the same steps as "Updating" in deploy/README.md,
-# pinned to the exact commit CI tested. If nothing under backend/, shared/,
-# deploy/ or tools/ai-stub/ changed since the last deploy, the rebuild is skipped.
+# pinned to the exact commit CI tested. If nothing under backend/, server/,
+# shared/ or deploy/ changed since the last deploy, the rebuild is skipped.
 #
 # Setup (once): GitHub signs in to AWS with OIDC, so no AWS keys are stored here.
 #   1. Create the IAM role described in deploy/README.md ("Automatic deploys").
@@ -92,7 +92,7 @@ jobs:
             before=$(git rev-parse HEAD)
             git reset --quiet --hard "$SHA"
             echo "Deploying $before -> $SHA"
-            if [ "$before" != "$SHA" ] && git diff --quiet "$before" "$SHA" -- backend shared deploy tools/ai-stub; then
+            if [ "$before" != "$SHA" ] && git diff --quiet "$before" "$SHA" -- backend server shared deploy; then
               echo "No backend changes since the last deploy - skipping rebuild."
               exit 0
             fi
