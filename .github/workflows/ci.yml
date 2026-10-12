@@ -6,8 +6,8 @@
 #   docker      builds the api and web images exactly as docker compose does, without pushing
 #
 # Deployment is not done here: the frontend is deployed by Vercel's GitHub
-# integration (see README "Deploying"), and the API + AI service are run from
-# the Docker images on a host of the team's choosing.
+# integration (see README "Deploying"), and the API is deployed to EC2 by
+# deploy-backend.yml once this workflow passes on main.
 name: CI
 
 on:

@@ -60,3 +60,17 @@ Stopping the instance pauses compute charges (the disk and Elastic IP still bill
 aws ec2 stop-instances --instance-ids i-085e917feb2ee6886 --region ap-southeast-2
 aws ec2 start-instances --instance-ids i-085e917feb2ee6886 --region ap-southeast-2
 ```
+
+## Automatic deploys
+
+`.github/workflows/deploy-backend.yml` runs the update above whenever CI passes on `main`, so merging a pull request deploys it. It can also be started by hand from Actions → Deploy backend → Run workflow. It skips (with a warning) if the instance is stopped, and skips the rebuild if nothing under `backend/`, `shared/`, `deploy/` or `tools/ai-stub/` changed.
+
+GitHub signs in to AWS with OIDC, so there are no AWS keys in GitHub. The role it assumes can only send commands to this one instance and can only be used by workflows on `main` of this repo (`deploy/github-actions/*.json`). One-time setup, from the repo root:
+
+```bash
+aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com
+aws iam create-role --role-name walking-meditation-github-deploy --assume-role-policy-document file://deploy/github-actions/trust-policy.json --tags Key=Project,Value=walking-meditation
+aws iam put-role-policy --role-name walking-meditation-github-deploy --policy-name deploy --policy-document file://deploy/github-actions/deploy-policy.json
+```
+
+Then add `arn:aws:iam::165328640519:role/walking-meditation-github-deploy` to the repo as the Actions secret `AWS_DEPLOY_ROLE_ARN` (Settings → Secrets and variables → Actions). Until it's set, the workflow skips without failing.
