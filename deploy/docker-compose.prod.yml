@@ -3,8 +3,8 @@
 #   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 #
 # Caddy terminates HTTPS for ${API_HOST} and proxies to the API. MongoDB is on
-# Atlas. The AI service is the stub for now; see deploy/README.md to swap in the
-# real one (./server) once the Gemini and Google Cloud TTS keys are set.
+# Atlas. The AI service (./server) calls Gemini for scripts and Google Cloud
+# Text-to-Speech for audio; its keys come from deploy/.env.
 
 services:
   caddy:
@@ -30,22 +30,27 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      AI_SERVICE_URL: http://ai-stub:8001
+      AI_SERVICE_URL: http://ai:8001
       AUDIO_DIR: /repo/backend/data/audio
     expose:
       - "8000"
     volumes:
       - audio:/repo/backend/data/audio
     depends_on:
-      - ai-stub
+      - ai
 
-  ai-stub:
-    image: node:22-alpine
+  # Only the API can reach it (no published ports). It gets just the keys it
+  # needs rather than the whole .env, so it never sees the database or JWT secrets.
+  ai:
+    build: ../server
     restart: unless-stopped
-    working_dir: /app
-    command: ["node", "stub.mjs"]
-    volumes:
-      - ../tools/ai-stub:/app:ro
+    environment:
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_TTS_API_KEY: ${GOOGLE_TTS_API_KEY:-}
+      INTERNAL_KEY: ${INTERNAL_KEY}
+    expose:
+      - "8001"
 
 volumes:
   caddy-data:

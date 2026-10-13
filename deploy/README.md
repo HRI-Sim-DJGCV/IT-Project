@@ -19,7 +19,7 @@ cd /opt/walking-meditation
 git clone https://github.com/HRI-Sim-DJGCV/IT-Project.git app
 cd app
 cp deploy/.env.example deploy/.env
-nano deploy/.env        # fill in MONGODB_URI, JWT_SECRET, CORS_ORIGINS, GOOGLE_MAPS_API_KEY
+nano deploy/.env        # fill in every value (see "AI service keys" below)
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 curl -s https://32-236-180-226.sslip.io/v1/health
 ```
@@ -35,22 +35,15 @@ cd /opt/walking-meditation/app && git pull
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 ```
 
-## Switching to the real AI service
+## AI service keys
 
-The stack runs the AI stub (canned route, script and silent audio). Scripts come from Gemini and audio from Google Cloud Text-to-Speech, both hosted APIs, so the real service fits on the t3.small. To switch:
+The stack runs the real AI service (`server/`): scripts come from Gemini and audio from Google Cloud Text-to-Speech, both hosted APIs, so it fits on the t3.small. In `deploy/.env`:
 
-1. In `deploy/.env`, fill in `GEMINI_API_KEY` and, if Cloud Text-to-Speech is on a different project from the Maps key, `GOOGLE_TTS_API_KEY`. Set `AI_INTERNAL_KEY` and `INTERNAL_KEY` to the same random value.
-2. In `deploy/docker-compose.prod.yml`, replace the `ai-stub` service with:
+- `GEMINI_API_KEY`: required, or script generation fails.
+- `GOOGLE_TTS_API_KEY`: only if Cloud Text-to-Speech is on a different Google Cloud project from `GOOGLE_MAPS_API_KEY`. Otherwise enable the Cloud Text-to-Speech API on the Maps key's project.
+- `AI_INTERNAL_KEY` and `INTERNAL_KEY`: the same random value (`openssl rand -hex 32`).
 
-   ```yaml
-   ai:
-     build: ../server
-     restart: unless-stopped
-     env_file: .env
-   ```
-
-   and point the API at it: `AI_SERVICE_URL: http://ai:8001`, `depends_on: [ai]`.
-3. Rebuild: `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build`
+After editing `deploy/.env`, rebuild (see Updating) so the containers pick up the new values. `curl -s https://32-236-180-226.sslip.io/v1/health` reports whether the AI service is reachable.
 
 ## Saving credits
 
@@ -63,7 +56,7 @@ aws ec2 start-instances --instance-ids i-085e917feb2ee6886 --region ap-southeast
 
 ## Automatic deploys
 
-`.github/workflows/deploy-backend.yml` runs the update above whenever CI passes on `main`, so merging a pull request deploys it. It can also be started by hand from Actions → Deploy backend → Run workflow. It skips (with a warning) if the instance is stopped, and skips the rebuild if nothing under `backend/`, `shared/`, `deploy/` or `tools/ai-stub/` changed.
+`.github/workflows/deploy-backend.yml` runs the update above whenever CI passes on `main`, so merging a pull request deploys it. It can also be started by hand from Actions → Deploy backend → Run workflow. It skips (with a warning) if the instance is stopped, and skips the rebuild if nothing under `backend/`, `server/`, `shared/` or `deploy/` changed.
 
 GitHub signs in to AWS with OIDC, so there are no AWS keys in GitHub. The role it assumes can only send commands to this one instance and can only be used by workflows on `main` of this repo (`deploy/github-actions/*.json`). One-time setup, from the repo root:
 
