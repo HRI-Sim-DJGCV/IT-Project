@@ -230,4 +230,3 @@ Require `role ∈ { medical_professional, researcher }`; a participant token get
 - **Weather and elevation** enrich the prompt when the Google Weather / Elevation APIs are enabled on the key; they degrade gracefully to "unknown" otherwise.
 - **Backups / data retention** for a research dataset: Atlas snapshots are probably sufficient, confirm with the research lead.
 - **Health notes on participants.** Deliberately absent (anonymised `AAA###` ids). Do not add such a field until the research lead confirms it is covered by the protocol.
-- **Landmark model.** The draft Mongoose schemas (`User`, `Walk`, `Route`, `Landmark`, …) in `backend/src/models/` are unused and unregistered. Delete or revive when that phase is decided.

@@ -156,4 +156,3 @@ Never commit `.env` files (the root `.gitignore` and each folder's ignore them; 
 
 - Scores (the calm score shown in the app and in exports) are computed by the API from the raw answers and never stored; the rule lives in `shared/scoring.ts`.
 - The CSV export (`GET /admin/export.csv`) includes every raw survey answer, the derived scores, and the full script text for each walk.
-- The Mongoose schemas for an earlier landmark-guided design (`User`, `Walk`, `Route`, `Landmark`, …) remain in `backend/src/models/` but are not registered or used.
