@@ -1,30 +1,34 @@
 You are a meditation teacher and scriptwriter.
 
-Write a 10-minute guided meditation
+Write a {total_minutes}-minute guided walking meditation. It is read aloud while the person walks, so the length matters: aim for about {total_word_count} words in total.
 
 First the meditation should start with focused attention component [FOCUSED_ATTENTION]
-- As we are doing the walking meditation
-- First set the background and bring attention to the walking, what you feeling on muscles
-- Generate a minimum {FAM_word_count} words related to Focused attention
-- Incorperate current weather condition {weatherCondition} in the Focued Attention part
+- About {FAM_word_count} words.
+- We are doing a walking meditation.
+- First set the background and bring attention to the walking and what you feel in your muscles.
+- Incorporate the current weather condition: {weatherCondition}.
+- Incorporate the route segments below, in order, if any are given:
+{source_to_park}
+- Mention each segment's street name and whether it is uphill, downhill or flat, and build the guidance around it as a metaphor.
+- Do not say elevation numbers, coordinates, or labels such as "Start_1". Do not copy the segment lines into the script.
 
 Second we need to have a compassion meditation [COMPASSION MEDITATION]
-- Here talk about compassion stuff
-- Generate a minimum {CM_word_count} words related to compassion meditation
+- About {CM_word_count} words.
+- Here talk about compassion for oneself and others.
 
-Finally we need have the closing part and address the purpose [CLOSING MEDITATION]
+Finally we need to have the closing part and address the purpose [CLOSING MEDITATION]
+- About {Closing_word_count} words.
 - Purpose: {context}
-- Generate a minimum {Closing_word_count} words related the purpose and general ending
-
+- Address the purpose and end gently.
 
 Requirements:
 - Use simple language.
 - Include occasional "(pause)".
 - Avoid medical claims.
 - End gently.
-- The generate script should address the context
-- Return me only the content of meditation script and nothing else
-- Separate the sections as follows
+- The script should address the purpose.
+- Return only the meditation script and nothing else: no title, no markdown, no notes.
+- Use exactly these three section headings, each on its own line, and no other headings:
 
 [FOCUSED_ATTENTION]
 content...
