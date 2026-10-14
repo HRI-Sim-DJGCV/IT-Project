@@ -68,7 +68,10 @@ async def _call(client: httpx.AsyncClient, prompt: str, model: str, temperature:
             headers={"x-goog-api-key": api_key},
             json={
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": temperature},
+                "generationConfig": {
+                    "temperature": temperature,
+                    "thinkingConfig": {"thinkingBudget": 0},
+                },
             },
         )
     except (httpx.TransportError, httpx.TimeoutException) as error:

@@ -11,16 +11,17 @@ from route.services.enrich_elevation import source_to_dest_elevation
 
 # Recorded on every walk so analysis can group scripts by how they were made.
 SCRIPT_MODEL = DEFAULT_MODEL
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 # Share of the walk given to each part of the meditation (must match the Node segmenter).
 FOCUSED_ATTENTION_SHARE = 0.2
 COMPASSION_SHARE = 0.4
 CLOSING_SHARE = 0.4
+WORDS_PER_MINUTE = 130
 
 
-def _words_for_minutes(minutes: float, *, wpm: int = 150) -> int:
-    return int(round(minutes * wpm))
+def _words_for_minutes(minutes: float) -> int:
+    return int(round(minutes * WORDS_PER_MINUTE))
 
 
 async def _weather(lat: float, lon: float) -> str:
@@ -53,9 +54,12 @@ async def generate_script_with_park(
     context: str,
 ) -> str:
     weather, elevation = await asyncio.gather(_weather(park.lat, park.lon), _elevation(source, park))
+    total_minutes = (to_park_time + park_time + park_to_destination_time) / 60
     prompt = render_template(
         get_script_generation_prompt("WITH_PARK"),
         context=context,
+        total_minutes=round(total_minutes),
+        total_word_count=_words_for_minutes(total_minutes),
         FAM_word_count=_words_for_minutes(to_park_time / 60),
         source_to_park="\n".join(elevation),
         CM_word_count=_words_for_minutes(park_time / 60),
@@ -76,6 +80,8 @@ async def generate_script_without_park(
     prompt = render_template(
         get_script_generation_prompt("WITHOUT_PARK"),
         context=context,
+        total_minutes=round(minutes),
+        total_word_count=_words_for_minutes(minutes),
         FAM_word_count=_words_for_minutes(minutes * FOCUSED_ATTENTION_SHARE),
         source_to_park="\n".join(elevation),
         CM_word_count=_words_for_minutes(minutes * COMPASSION_SHARE),

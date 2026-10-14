@@ -61,4 +61,4 @@ def get_script_generation_prompt(meditation_style:str ) -> str:
     if meditation_style == "WITHOUT_PARK":
         return load_template(PROMPT_FOLDER / "without_park.txt")
     else:
-        return load_template(PROMPT_FOLDER / "with_park_xml.txt")
+        return load_template(PROMPT_FOLDER / "with_park.txt")
