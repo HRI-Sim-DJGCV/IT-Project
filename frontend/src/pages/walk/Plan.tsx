@@ -15,7 +15,7 @@ export function Plan() {
   const navigate = useNavigate()
   const { draft, updateDraft } = useSession()
   const { currentLocation, usingFallback } = useCurrentLocation()
-  const initialRouteType = draft?.plan?.routeType ?? null
+  const initialRouteType = draft?.plan?.routeType ?? draft?.suggestedRouteType ?? null
 
   const [startMode, setStartMode] = useState<StartMode>(
     draft?.plan?.startLocation === 'Current location' ? 'current' : 'address',
