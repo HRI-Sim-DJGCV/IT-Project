@@ -6,6 +6,8 @@ import { Screen } from '../components/ui'
 import { useSession } from '../context/SessionContext'
 import { useHighContrast } from '../context/HighContrastContext'
 import { Box, Button, Card, CardContent, Stack, Typography } from '@mui/material'
+import { RouteTypeArt } from '../components/RouteTypeArt'
+import { ROUTE_TYPE_PITCH } from '../components/routeTypePitch'
 import type { RouteType, WalkRecord } from '../types'
 import { suggestRouteType, summariseWeek } from './homeStats'
 
@@ -216,18 +218,22 @@ export function Home() {
           </CardContent>
         </Card>
 
-        <Card component="section" aria-label="Walk suggestion" variant="outlined" sx={{ borderRadius: 3 }}>
+        <Card component="section" aria-label="Walk suggestion" variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
+          <RouteTypeArt routeType={suggestion.routeType} highContrast={highContrast} />
           <CardContent>
             <Stack spacing={1.5}>
-              <Typography component="h3" variant="subtitle2" sx={{ fontWeight: 600 }}>
+              <Typography component="h3" variant="overline" color="text.secondary" sx={{ fontWeight: 600, lineHeight: 1.5 }}>
                 Try something different
               </Typography>
-              <Stack spacing={0.25}>
+              <Stack spacing={0.5}>
                 <Typography component="p" variant="h6">
-                  {ROUTE_TYPE_LABELS[suggestion.routeType]}
+                  {ROUTE_TYPE_PITCH[suggestion.routeType].title}
                 </Typography>
                 <Typography color="text.secondary" variant="body2">
-                  {suggestion.reason}
+                  {ROUTE_TYPE_PITCH[suggestion.routeType].blurb}
+                </Typography>
+                <Typography color="text.secondary" variant="caption">
+                  {ROUTE_TYPE_LABELS[suggestion.routeType]} · {suggestion.reason}
                 </Typography>
               </Stack>
               <Button fullWidth onClick={() => begin(suggestion.routeType)} variant="outlined" sx={outlinedButtonSx}>
