@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react'
 import { getMe } from '../api'
 import { setAuthToken, setUnauthorizedHandler } from '../api/http'
-import type { GeneratedScript, Participant, Role, RouteOption, SurveyResponse, WalkPlan } from '../types'
+import type { GeneratedScript, Participant, Role, RouteOption, RouteType, SurveyResponse, WalkPlan } from '../types'
 
 /** Everything gathered during one walk flow, built up screen by screen. */
 export interface WalkDraft {
@@ -10,6 +10,8 @@ export interface WalkDraft {
   startedAt: string
   preSurvey?: SurveyResponse
   plan?: WalkPlan
+  /** A route type the home screen suggested; the plan screen starts with it selected, and the participant can change it. */
+  suggestedRouteType?: RouteType
   route?: RouteOption
   /** Set once the server has started generating this walk's script and audio */
   preparationId?: string
