@@ -7,6 +7,9 @@ import { useSession } from '../../context/SessionContext'
 import { useScriptAudio } from '../../hooks/useScriptAudio'
 import { useWalkDistance } from '../../hooks/useWalkDistance'
 
+/** Title of the welcome segment the API puts at 0s (backend/src/services/scriptSegments.ts). */
+const WELCOME_TITLE = 'Welcome'
+
 function fmt(sec: number) {
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
@@ -37,8 +40,10 @@ export function Progress() {
   const tracking = useWalkDistance(phase !== 'ready')
   const followGps = tracking.status !== 'unavailable' && routeMetres > 0
   const elapsed = followGps ? Math.min(totalSec, (tracking.distanceM / routeMetres) * totalSec) : activeSec
-  // Standing still: hold the guide until the participant moves again. Not held while still finding the location.
-  const holding = phase === 'running' && followGps && tracking.status === 'tracking' && !tracking.moving
+  // Standing still: hold the guide until the participant moves again. Not held while still finding the location,
+  // nor during the opening welcome, which always plays in full.
+  const welcoming = audio.current?.title === WELCOME_TITLE
+  const holding = phase === 'running' && followGps && tracking.status === 'tracking' && !tracking.moving && !welcoming
 
   // Guard: the walk needs a route and a generated script.
   useEffect(() => {

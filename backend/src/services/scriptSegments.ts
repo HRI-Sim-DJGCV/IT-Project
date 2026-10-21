@@ -18,6 +18,10 @@ const HEADINGS: Array<{ section: Section; pattern: RegExp }> = [
   { section: 'closing', pattern: /\[\s*closing(?:[\s_]*meditation)?\s*\]/i },
 ]
 
+/** Spoken the moment the walk begins, before the script, so participants hear the guide's voice straight away. */
+export const WELCOME_TITLE = 'Welcome'
+const WELCOME_TEXT = 'Welcome to your guided walk.'
+
 const WORDS_PER_MINUTE = 130 // slow, guided pace
 /** Upper bound per TTS request; keeps each clip short enough to stream and to pause between. */
 const MAX_CHUNK_CHARS = 700
@@ -89,13 +93,14 @@ export function estimateSpeechSeconds(text: string): number {
  * Turns the raw script into timed segments for a walk of `durationMinutes`.
  * Each section starts at its fraction of the walk; within a section, chunks
  * are spread evenly so the speech is spaced out with silence in between
- * rather than read back to back. Audio indexes are assigned in order.
+ * rather than read back to back. Audio indexes are assigned in order, after
+ * a short welcome at 0s. An empty script gives no segments at all.
  */
 export function buildSegments(raw: string, durationMinutes: number): ScriptSegment[] {
   const total = durationMinutes * 60
   const sections = splitSections(raw)
   const segments: ScriptSegment[] = []
-  let audioIndex = 0
+  let audioIndex = 1
   for (const layout of SECTION_LAYOUT) {
     const chunks = chunkText(sections[layout.section])
     if (chunks.length === 0) continue
@@ -117,5 +122,7 @@ export function buildSegments(raw: string, durationMinutes: number): ScriptSegme
       cursor += estimateSpeechSeconds(text) + gap
     })
   }
-  return segments
+  if (segments.length === 0) return segments
+  const welcome: ScriptSegment = { atSecond: 0, section: 'focused_attention', title: WELCOME_TITLE, text: WELCOME_TEXT, audioIndex: 0 }
+  return [welcome, ...segments]
 }
