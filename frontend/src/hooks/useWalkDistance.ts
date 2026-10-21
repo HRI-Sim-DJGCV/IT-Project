@@ -33,6 +33,8 @@ export function useWalkDistance(enabled: boolean) {
     if (!supported) return
     // Treated as moving for the first START_GRACE_MS, then only after real steps.
     lastStepAtRef.current = Date.now() + (START_GRACE_MS - MOVING_GRACE_MS)
+    // Set now, not on the first interval tick, so a quick first fix can't read the initial `false` and hold the guide.
+    setMoving(true)
     let gotFix = false
     const noFixTimer = setTimeout(() => {
       if (!gotFix) setStatus('unavailable')

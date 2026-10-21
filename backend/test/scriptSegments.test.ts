@@ -52,10 +52,19 @@ describe('estimateSpeechSeconds', () => {
 })
 
 describe('buildSegments', () => {
+  it('opens with a welcome at 0s, before the script', () => {
+    const segments = buildSegments(script, 30)
+    expect(segments[0]).toMatchObject({ atSecond: 0, title: 'Welcome', text: 'Welcome to your guided walk.', audioIndex: 0 })
+  })
+
+  it('adds no welcome to an empty script', () => {
+    expect(buildSegments('', 30)).toEqual([])
+  })
+
   it('schedules sections at 0%, 20% and 60% of the walk with sequential audio indexes', () => {
     const segments = buildSegments(script, 30)
-    expect(segments.map((s) => s.audioIndex)).toEqual([0, 1, 2, 3])
-    expect(segments[0]).toMatchObject({ atSecond: 0, section: 'focused_attention', title: 'Focused attention 1/2' })
+    expect(segments.map((s) => s.audioIndex)).toEqual([0, 1, 2, 3, 4])
+    expect(segments[1]).toMatchObject({ atSecond: 0, section: 'focused_attention', title: 'Focused attention 1/2' })
     expect(segments.find((s) => s.section === 'compassion')).toMatchObject({ atSecond: 360, title: 'Compassion' })
     expect(segments.find((s) => s.section === 'closing')).toMatchObject({ atSecond: 1080, title: 'Closing' })
   })
