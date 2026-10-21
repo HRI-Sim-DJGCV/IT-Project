@@ -174,7 +174,7 @@ One document per completed walk. Surveys, plan, route and **the generated script
   "actualMinutes": 31,
   "preparationId": ObjectId,
   "script": {
-    "generator": "ai", "model": "gemini-2.5-flash", "promptVersion": 1,
+    "generator": "ai", "model": "gemini-3.8-flash", "promptVersion": 1,
     "context": "A 30-minute walking meditation for stress regulation …",
     "voice": { "voiceName": "en-US-Neural2-D", "languageCode": "en-US", "speakingRate": 0.9, "pitch": 0 },
     "segments": [ { "atSecond": 0, "section": "focused_attention", "title": "Focused attention 1/3", "text": "...", "audioIndex": 0 }, … ],

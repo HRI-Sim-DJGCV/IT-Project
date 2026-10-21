@@ -11,7 +11,7 @@ import httpx
 from route.config import gemini_api_key
 from route.errors import GeminiAPIError
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,8 @@ async def _call(client: httpx.AsyncClient, prompt: str, model: str, temperature:
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                 "generationConfig": {
                     "temperature": temperature,
-                    "thinkingConfig": {"thinkingBudget": 0},
+                    # Gemini 3 models can't switch thinking off; "low" is the least 3.8 Flash allows.
+                    "thinkingConfig": {"thinkingLevel": "low"},
                 },
             },
         )
